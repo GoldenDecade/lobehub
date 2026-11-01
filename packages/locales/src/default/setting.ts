@@ -3199,8 +3199,8 @@ When I am ___, I need ___
   'workspace.member.profileModal.responsibilities': 'Responsibilities',
   'workspace.member.profileModal.responsibilitiesPlaceholder':
     'What this person owns and works on, so teammates and AI know who to ask',
-  'workspace.member.profileModal.responsibilitiesHint':
-    'The member list shows the first line; the role card shows all of it',
+  'workspace.member.profileModal.responsibilitiesHint': 'Shown on the member details card',
+  'workspace.member.profileModal.role': 'Role',
   'workspace.member.profileModal.save': 'Save',
   'workspace.member.profileModal.success': 'Profile updated',
   'workspace.member.profileModal.title': 'Edit profile for {{username}}',
@@ -3327,7 +3327,6 @@ When I am ___, I need ___
   'workspace.members.columns.jobTitle': 'Position',
   'workspace.members.columns.name': 'Name',
   'workspace.members.columns.role': 'Role',
-  'workspace.members.columns.responsibilities': 'Responsibilities',
   'workspace.members.empty': 'No members yet',
   'workspace.members.search.empty': 'No members match "{{keyword}}"',
   'workspace.members.search.placeholder': 'Search name or position',
