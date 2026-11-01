@@ -28,7 +28,11 @@ const deepseekChatModels: AIChatModelCard[] = [
     },
     releasedAt: '2026-09-10',
     settings: {
-      extendParams: ['deepseekV4GAReasoningEffort'],
+      reasoningEffort: {
+        controlsThinking: true,
+        default: 'high',
+        levels: ['none', 'low', 'high', 'max'],
+      },
     },
     type: 'chat',
   },
