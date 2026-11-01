@@ -33,7 +33,6 @@ const qwenChatModels: AIChatModelCard[] = [
     settings: {
       reasoningEffort: {
         controlsThinking: true,
-        default: 'high',
         levels: ['none', 'low', 'high', 'max'],
       },
       searchImpl: 'params',
@@ -66,7 +65,6 @@ const qwenChatModels: AIChatModelCard[] = [
     settings: {
       reasoningEffort: {
         controlsThinking: true,
-        default: 'high',
         levels: ['none', 'low', 'high', 'max'],
       },
       searchImpl: 'params',
@@ -106,7 +104,6 @@ const qwenChatModels: AIChatModelCard[] = [
       extendParams: ['preserveThinking'],
       reasoningEffort: {
         controlsThinking: true,
-        default: 'medium',
         levels: ['none', 'low', 'medium', 'xhigh'],
       },
       searchImpl: 'params',
@@ -146,7 +143,6 @@ const qwenChatModels: AIChatModelCard[] = [
       extendParams: ['preserveThinking'],
       reasoningEffort: {
         controlsThinking: true,
-        default: 'medium',
         levels: ['none', 'low', 'medium', 'xhigh'],
       },
       searchImpl: 'params',
@@ -390,7 +386,7 @@ const qwenChatModels: AIChatModelCard[] = [
       ],
     },
     settings: {
-      reasoningEffort: { controlsThinking: true, default: 'high', levels: ['none', 'high', 'max'] },
+      reasoningEffort: { controlsThinking: true, levels: ['none', 'high', 'max'] },
       searchImpl: 'params',
     },
     type: 'chat',
@@ -417,7 +413,7 @@ const qwenChatModels: AIChatModelCard[] = [
       ],
     },
     settings: {
-      reasoningEffort: { controlsThinking: true, default: 'high', levels: ['none', 'high', 'max'] },
+      reasoningEffort: { controlsThinking: true, levels: ['none', 'high', 'max'] },
       searchImpl: 'params',
     },
     type: 'chat',

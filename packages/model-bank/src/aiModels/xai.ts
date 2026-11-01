@@ -139,7 +139,7 @@ const xaiChatModels: AIChatModelCard[] = [
     },
     releasedAt: '2026-07-08',
     settings: {
-      reasoningEffort: { default: 'medium', levels: ['low', 'medium', 'high'] },
+      reasoningEffort: { levels: ['low', 'medium', 'high'] },
       searchImpl: 'params',
     },
     type: 'chat',
@@ -192,7 +192,7 @@ const xaiChatModels: AIChatModelCard[] = [
     },
     releasedAt: '2026-05-01',
     settings: {
-      reasoningEffort: { default: 'medium', levels: ['none', 'low', 'medium', 'high'] },
+      reasoningEffort: { levels: ['none', 'low', 'medium', 'high'] },
       searchImpl: 'params',
     },
     type: 'chat',
@@ -348,7 +348,7 @@ const xaiChatModels: AIChatModelCard[] = [
     },
     releasedAt: '2026-03-09',
     settings: {
-      reasoningEffort: { default: 'high', levels: ['low', 'medium', 'high', 'xhigh'] },
+      reasoningEffort: { levels: ['low', 'medium', 'high', 'xhigh'] },
       searchImpl: 'params',
     },
     type: 'chat',
