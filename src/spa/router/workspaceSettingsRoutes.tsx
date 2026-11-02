@@ -54,6 +54,15 @@ export const workspaceSettingsContentRoute: RouteObject = {
       },
       path: 'members',
     },
+    // Member detail — the page reads the member id from the route param.
+    {
+      element: dynamicElement(
+        () => import('@/routes/(main)/[workspaceSlug]/settings/members'),
+        'Desktop > Workspace > Settings > Members > Detail',
+      ),
+      handle: { meta: routeMeta({ Skeleton: createSurfaceSkeleton('detail') }) },
+      path: 'members/:memberId',
+    },
     {
       element: dynamicElement(
         () => import('@/routes/(main)/[workspaceSlug]/settings/teams'),
