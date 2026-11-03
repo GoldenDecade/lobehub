@@ -203,7 +203,7 @@ describe('desktop router shared definition', () => {
   });
 
   it.each(mainAreaVariants)(
-    '%s exposes project channel, task, goal, dashboard, and acceptance workspaces',
+    '%s exposes project channel, task, goal, dashboard, artboard, and acceptance workspaces',
     (_, factory) => {
       const projectRoute = factory().find((route) => route.path === 'project/:projectId');
       const projectIndexRoute = projectRoute?.children?.find((route) => route.index);
@@ -219,6 +219,7 @@ describe('desktop router shared definition', () => {
         'settings/:section?',
         'goals',
         'dashboard',
+        'artboard',
         'acceptance',
       ]);
       for (const section of ['general', 'members', 'knowledge', 'environments', 'directories']) {

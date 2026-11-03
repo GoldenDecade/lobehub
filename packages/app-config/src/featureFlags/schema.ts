@@ -65,6 +65,13 @@ export const FeatureFlagsSchema = z.object({
   dashboard: FeatureFlagValue.optional(),
 
   /**
+   * Artboard prototype: the project Artboard tab, rendered from fixture data
+   * with no persistence. Remove the flag once the board reads real project
+   * data. Array values are user ids.
+   */
+  artboard: FeatureFlagValue.optional(),
+
+  /**
    * Trial gate for the rail layout: icon rail + one wrapped list column and
    * content, the IM-style Messages list (Lobe AI opens by default), Contacts,
    * the Tasks scope list and the agent profile side panel. Off keeps the
@@ -185,6 +192,9 @@ export const DEFAULT_FEATURE_FLAGS: IFeatureFlags = {
   // Off until an admin publishes a user allowlist or flips it to true.
   dashboard: false,
 
+  // On in development only; production needs an explicit allowlist.
+  artboard: isDev,
+
   // Off: a personal-trial layout, enabled per user id.
   im_layout: false,
 
@@ -234,6 +244,7 @@ export const mapFeatureFlagsEnvToState = (
       'agent_gateway_mux_mobile',
     ),
     enableLlmRelay: evaluateFeatureFlag(config.agent_llm_relay, userId, 'agent_llm_relay'),
+    enableArtboard: evaluateFeatureFlag(config.artboard, userId, 'artboard'),
     enableDashboard: evaluateFeatureFlag(config.dashboard, userId, 'dashboard'),
     enableImLayout: evaluateFeatureFlag(config.im_layout, userId, 'im_layout'),
     enableChannels: evaluateFeatureFlag(config.channel, userId, 'channel'),

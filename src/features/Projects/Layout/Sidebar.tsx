@@ -6,6 +6,7 @@ import {
   HouseIcon,
   LayoutDashboardIcon,
   ListTodoIcon,
+  PresentationIcon,
   SettingsIcon,
   TargetIcon,
 } from 'lucide-react';
@@ -14,6 +15,7 @@ import { useTranslation } from 'react-i18next';
 import { useLocation } from 'react-router';
 
 import AsyncError from '@/components/AsyncError';
+import { useArtboardFeature } from '@/features/Artboard/useArtboardFeature';
 import { useDashboardFeature } from '@/features/Dashboard/hooks/useDashboardFeature';
 import NavItem from '@/features/NavPanel/components/NavItem';
 import { NavPanelPortal } from '@/features/NavPanel/NavPanelPortal';
@@ -25,6 +27,7 @@ import { useCurrentProjectDetail, useProjectByRef, useProjectStore } from '@/sto
 import { projectComposerAgents } from '../Workspace/projectComposerAgents';
 import {
   getProjectAcceptancePath,
+  getProjectArtboardPath,
   getProjectDashboardPath,
   getProjectGoalsPath,
   getProjectHomePath,
@@ -45,11 +48,13 @@ const ProjectSidebarContent = memo(() => {
   // The list row is enough for the header and topics; the detail can come later.
   const project = useProjectByRef(projectId);
   const { enabled: dashboardEnabled } = useDashboardFeature();
+  const { enabled: artboardEnabled } = useArtboardFeature();
   const projectHomePath = getProjectHomePath(projectId!);
   const projectTasksPath = getProjectTasksPath(projectId!);
   const projectGoalsPath = getProjectGoalsPath(projectId!);
   const projectAcceptancePath = getProjectAcceptancePath(projectId!);
   const projectDashboardPath = getProjectDashboardPath(projectId!);
+  const projectArtboardPath = getProjectArtboardPath(projectId!);
 
   // The main agent leads the composer list; its meta names its topic group before any topic.
   const coordinatorAgent = useMemo(
@@ -98,6 +103,14 @@ const ProjectSidebarContent = memo(() => {
               icon={LayoutDashboardIcon}
               title={t('sections.dashboard')}
               onClick={() => navigate(projectDashboardPath)}
+            />
+          )}
+          {artboardEnabled && (
+            <NavItem
+              active={isProjectSectionActive(pathname, projectArtboardPath)}
+              icon={PresentationIcon}
+              title={t('sections.artboard')}
+              onClick={() => navigate(projectArtboardPath)}
             />
           )}
           <NavItem
