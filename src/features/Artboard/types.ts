@@ -58,32 +58,9 @@ export interface BoardNote {
   y: number;
 }
 
-export interface BoardCheck {
-  frame: string;
-  id: string;
-  title: string;
-}
-
-export type CheckStatus = 'failed' | 'passed' | 'pending';
-
-export interface CheckResult {
-  obs?: string;
-  shot?: boolean;
-  status: CheckStatus;
-}
-
-export type ReviewVerdict = 'accept' | 'reject';
-
-export interface ChatMessage {
-  card?: { desc: string; type: 'acceptance' | 'board' };
-  id: string;
-  quote?: string | null;
-  role: 'agent' | 'user';
-  text: string;
-}
-
 export type BoardPhase = 'discuss' | 'finalized';
 export type BoardMode = 'discuss' | 'verify';
+export type VerifyView = 'board' | 'flow';
 export type BoardPreviewState = 'empty' | 'error' | 'generating' | 'normal';
 
 export type CameraTarget =

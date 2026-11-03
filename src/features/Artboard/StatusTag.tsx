@@ -1,22 +1,34 @@
 import { Icon, Tag } from '@lobehub/ui';
-import { cssVar } from '@lobehub/ui/stylex/cssVar.stylex';
-import { CheckIcon, CircleDashedIcon, XIcon } from 'lucide-react';
+import {
+  CheckIcon,
+  CircleDashedIcon,
+  CircleDotIcon,
+  CircleHelpIcon,
+  CirclePauseIcon,
+  XIcon,
+} from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
-import type { CheckStatus } from './types';
+import type { FlowNodeState } from './fixture/acceptanceFlow';
 
-export const STATUS_META = {
-  failed: { color: 'error', icon: XIcon, tone: cssVar.colorError },
-  passed: { color: 'success', icon: CheckIcon, tone: cssVar.colorSuccess },
-  pending: { color: undefined, icon: CircleDashedIcon, tone: cssVar.colorTextTertiary },
+const META = {
+  blocked: { color: 'warning', icon: CirclePauseIcon },
+  failed: { color: 'error', icon: XIcon },
+  partial: { color: 'warning', icon: CircleDotIcon },
+  passed: { color: 'success', icon: CheckIcon },
+  pending: { color: undefined, icon: CircleDashedIcon },
+  uncertain: { color: 'warning', icon: CircleHelpIcon },
 } as const;
 
-const StatusTag = ({ status }: { status: CheckStatus }) => {
-  const { t } = useTranslation('project');
-  const meta = STATUS_META[status];
+export const stateIcon = (state: FlowNodeState) => META[state ?? 'pending'].icon;
+
+const StatusTag = ({ state }: { state: FlowNodeState }) => {
+  const { t } = useTranslation('verify');
+  const key = state ?? 'pending';
+  const meta = META[key];
   return (
     <Tag color={meta.color} icon={<Icon icon={meta.icon} />} size={'small'}>
-      {t(`artboard.status.${status}`)}
+      {t(`flow.state.${key}`)}
     </Tag>
   );
 };

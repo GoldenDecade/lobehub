@@ -4,8 +4,18 @@ import * as stylex from '@stylexjs/stylex';
 import { ArrowLeftIcon } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
-import { ARROWS, checkByFrame, frameById } from '../fixture/board';
-import StatusTag, { STATUS_META } from '../StatusTag';
+import { flowStateColor } from '@/features/Acceptance/Viewer/Flow/FlowNode';
+
+import {
+  checkByNode,
+  JOURNEY_FLOW,
+  JOURNEY_VERSION,
+  nodeAttempts,
+  nodeReview,
+  nodeState,
+} from '../fixture/acceptanceFlow';
+import { frameById } from '../fixture/board';
+import StatusTag from '../StatusTag';
 import { artboardActions, useArtboardStore } from '../store';
 import { EmptyThumb, Thumb } from './Thumb';
 
@@ -24,15 +34,26 @@ const styles = stylex.create({
 
 const CheckDetail = ({ frameId }: { frameId: string }) => {
   const { t } = useTranslation('project');
-  const { result, rev, review } = useArtboardStore((s) => ({
-    result: s.results[frameId],
-    rev: s.revs[frameId] ?? 1,
-    review: s.reviews[frameId],
-  }));
-  const check = checkByFrame[frameId];
+  const { rev, run } = useArtboardStore((s) => ({ rev: s.revs[frameId] ?? 1, run: s.run }));
+  const check = checkByNode[frameId];
   const frame = frameById[frameId];
-  const incoming = ARROWS.filter((a) => a.to === frameId);
-  const failed = result.status === 'failed';
+  const state = nodeState(run, frameId);
+  const review = nodeReview(run, frameId);
+  const attempts = nodeAttempts(run, frameId);
+  const verdictOf = (edgeId: string | null) =>
+    attempts.find((attempt) => attempt.incomingEdgeId === edgeId)?.verdict;
+  const paths = [
+    ...(frameId === JOURNEY_FLOW.entryNodeId ? [{ edgeId: null, label: null }] : []),
+    ...JOURNEY_VERSION.edges
+      .filter((edge) => edge.targetNodeKey === frameId)
+      .map((edge) => ({
+        edgeId: edge.id,
+        label: `${frameById[edge.sourceNodeKey].title} → ${edge.trigger}`,
+      })),
+  ];
+  const failed = state === 'failed';
+  const shot = !!state && state !== 'blocked';
+  const observation = attempts[0]?.observation;
 
   return (
     <Flexbox gap={4}>
@@ -49,27 +70,26 @@ const CheckDetail = ({ frameId }: { frameId: string }) => {
         </Text>
       </Flexbox>
       <Flexbox horizontal align="center" gap={8}>
-        <StatusTag status={result.status} />
+        <StatusTag state={state} />
         <Text code style={{ fontSize: 12 }} type="secondary">
           {check.id} ↔ {frame.id}
         </Text>
       </Flexbox>
       <Text strong style={{ fontSize: 15, marginTop: 6 }}>
-        {check.title}
+        {check.definition.expected}
       </Text>
       <Flexbox gap={6} {...stylex.props(styles.section)}>
         <Text style={{ fontSize: 12 }} type="secondary">
           {t('artboard.verify.paths')}
         </Text>
-        {incoming.length ? (
-          incoming.map((a) => (
-            <Text key={a.d} style={{ fontSize: 13 }}>
-              {frameById[a.from].title} → {a.label}
+        {paths.map((path) => (
+          <Flexbox horizontal align="center" gap={8} key={path.edgeId ?? 'entry'}>
+            <Text style={{ flex: 1, fontSize: 13, minWidth: 0 }}>
+              {path.label ?? t('artboard.verify.entry')}
             </Text>
-          ))
-        ) : (
-          <Text style={{ fontSize: 13 }}>{t('artboard.verify.entry')}</Text>
-        )}
+            {run && <StatusTag state={verdictOf(path.edgeId)} />}
+          </Flexbox>
+        ))}
       </Flexbox>
       <Flexbox gap={8} {...stylex.props(styles.section)}>
         <Flexbox horizontal gap={8}>
@@ -83,20 +103,20 @@ const CheckDetail = ({ frameId }: { frameId: string }) => {
             <Text style={{ fontSize: 12 }} type="secondary">
               {t('artboard.verify.realShot')}
             </Text>
-            {result.shot ? (
-              <Thumb real rev={rev} screen={frame.screen} tone={STATUS_META[result.status].tone} />
+            {shot ? (
+              <Thumb real rev={rev} screen={frame.screen} tone={flowStateColor(state)} />
             ) : (
               <EmptyThumb>{t('artboard.verify.noShot')}</EmptyThumb>
             )}
           </Flexbox>
         </Flexbox>
-        {result.obs && (
+        {observation && (
           <Text style={{ fontSize: 13 }} type={failed ? 'danger' : undefined}>
-            {t('artboard.verify.observation', { text: result.obs })}
+            {t('artboard.verify.observation', { text: observation })}
           </Text>
         )}
       </Flexbox>
-      {result.status !== 'pending' && (
+      {state && (
         <Flexbox gap={8} style={{ paddingTop: 14 }}>
           <Text style={{ fontSize: 12 }} type="secondary">
             {t('artboard.verify.reviewTitle')}
@@ -104,17 +124,17 @@ const CheckDetail = ({ frameId }: { frameId: string }) => {
           {review ? (
             <Text>
               {t(
-                review === 'accept'
+                review === 'accepted'
                   ? 'artboard.verify.reviewAccepted'
                   : 'artboard.verify.reviewRejected',
               )}
             </Text>
           ) : (
             <Flexbox horizontal gap={8}>
-              <Button onClick={() => artboardActions.review(frameId, 'accept')}>
+              <Button onClick={() => artboardActions.review(frameId, 'accepted')}>
                 {t('artboard.verify.accept')}
               </Button>
-              <Button danger onClick={() => artboardActions.review(frameId, 'reject')}>
+              <Button danger onClick={() => artboardActions.review(frameId, 'rejected')}>
                 {t(failed ? 'artboard.verify.rejectFailed' : 'artboard.verify.reject')}
               </Button>
             </Flexbox>

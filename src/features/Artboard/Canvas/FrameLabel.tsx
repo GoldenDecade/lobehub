@@ -3,11 +3,13 @@ import { ImageIcon, LockIcon, PlayIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 
+import { flowStateColor } from '@/features/Acceptance/Viewer/Flow/FlowNode';
 import { sx } from '@/styles/sx';
 
+import type { FlowNodeState } from '../fixture/acceptanceFlow';
 import { FRAME_W } from '../fixture/board';
-import StatusTag, { STATUS_META } from '../StatusTag';
-import type { BoardFrame, CheckResult } from '../types';
+import StatusTag, { stateIcon } from '../StatusTag';
+import type { BoardFrame } from '../types';
 import { canvasStyles } from './styles';
 
 interface ScaledLabelProps {
@@ -34,12 +36,12 @@ interface FrameLabelProps {
   frame: BoardFrame;
   k: number;
   linked?: string;
-  result?: CheckResult;
   rev: number;
+  state?: FlowNodeState;
   verify: boolean;
 }
 
-const FrameLabel = ({ comments, frame, k, linked, result, rev, verify }: FrameLabelProps) => {
+const FrameLabel = ({ comments, frame, k, linked, rev, state, verify }: FrameLabelProps) => {
   const { t } = useTranslation('project');
   const screenWidth = FRAME_W * k;
   if (screenWidth < 90) return null;
@@ -48,12 +50,8 @@ const FrameLabel = ({ comments, frame, k, linked, result, rev, verify }: FrameLa
     return (
       <ScaledLabel gap={4} k={k} width={FRAME_W}>
         <Flexbox horizontal align="center" gap={4} style={{ minWidth: 0 }}>
-          {verify && result && (
-            <Icon
-              color={STATUS_META[result.status].tone}
-              icon={STATUS_META[result.status].icon}
-              size={12}
-            />
+          {verify && linked && (
+            <Icon color={flowStateColor(state)} icon={stateIcon(state)} size={12} />
           )}
           <Text ellipsis strong style={{ fontSize: 12 }}>
             {frame.title}
@@ -98,7 +96,7 @@ const FrameLabel = ({ comments, frame, k, linked, result, rev, verify }: FrameLa
             {linked}
           </Tag>
         )}
-        {verify && result && <StatusTag status={result.status} />}
+        {verify && linked && <StatusTag state={state} />}
         {!verify && comments > 0 && (
           <Text style={{ fontSize: 12 }} type="secondary">
             {t('artboard.frame.comments', { count: comments })}

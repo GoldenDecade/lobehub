@@ -1,3 +1,4 @@
+import type { AcceptanceFlowReview } from '@lobechat/types';
 import { toast } from '@lobehub/ui';
 import { t } from 'i18next';
 
@@ -5,30 +6,25 @@ import type { StoreSetter } from '@/store/types';
 import { setNamespace } from '@/utils/storeDebug';
 
 import {
-  ALL_ITEM_IDS,
-  checkByFrame,
-  frameById,
-  JOURNEY_GROUP,
-  noteById,
-  PENDING_NOTES,
-} from '../fixture/board';
+  type BoardToolCall,
+  openBoardPanel,
+  postAgentMessage,
+  postUserMessage,
+  startAgentReply,
+} from '../Conversation/messages';
+import { BUILD_RUN, checkByNode, nodeState, reviewNode } from '../fixture/acceptanceFlow';
+import { ALL_ITEM_IDS, frameById, JOURNEY_GROUP, noteById, PENDING_NOTES } from '../fixture/board';
 import {
   ACCEPTANCE_CARD,
   AGENT_LINES,
   AGENT_REPLIES,
   BOARD_CARD,
-  FILLED_RESULTS,
   OPENING_USER,
-  PENDING_RESULTS,
   REVIEW_LINES,
+  USER_LINES,
 } from '../fixture/conversation';
-import type {
-  BoardMode,
-  BoardPreviewState,
-  CameraTarget,
-  ChatMessage,
-  ReviewVerdict,
-} from '../types';
+import { targetName } from '../targetName';
+import type { BoardMode, BoardPreviewState, CameraTarget, VerifyView } from '../types';
 import { type ArtboardState, initialState } from './initialState';
 import { useArtboardStore } from './store';
 
@@ -41,7 +37,6 @@ export class ArtboardActionImpl {
   readonly #get: () => ArtboardState;
   readonly #set: Setter;
   #cameraSeq = 0;
-  #messageSeq = 0;
   #narrow = false;
   #timers: ReturnType<typeof setTimeout>[] = [];
 
@@ -59,10 +54,31 @@ export class ArtboardActionImpl {
     this.#timers = [];
   };
 
-  #push = (message: Omit<ChatMessage, 'id'>) => {
-    this.#messageSeq += 1;
-    const id = `m-${this.#messageSeq}`;
-    this.#set((s) => ({ messages: [...s.messages, { ...message, id }] }), false, n('push'));
+  #user = (text: string, quote?: string | null) => {
+    if (quote)
+      this.#set(
+        (s) => ({ comments: { ...s.comments, [quote]: (s.comments[quote] ?? 0) + 1 } }),
+        false,
+        n('comment'),
+      );
+    const re = quote
+      ? `> ${t('artboard.chat.quote', { ns: 'project', target: targetName(quote) })}\n\n`
+      : '';
+    postUserMessage(`${re}${text}`);
+  };
+
+  #agent = (text: string, card?: BoardToolCall) => {
+    const toolMessageId = postAgentMessage(text, card);
+    if (toolMessageId) openBoardPanel(toolMessageId);
+  };
+
+  #reply = (ms: number, fn: () => string) => {
+    const finish = startAgentReply();
+    this.#set({ typing: true }, false, n('replyStart'));
+    this.#later(ms, () => {
+      this.#set({ typing: false }, false, n('replyDone'));
+      finish(fn());
+    });
   };
 
   #show = (ids: string[]) => {
@@ -93,33 +109,22 @@ export class ArtboardActionImpl {
     if (narrow === this.#narrow) return;
     this.#narrow = narrow;
     this.#set(
-      narrow
-        ? { chatOpen: false, outlineOpen: false, verifyOpen: false }
-        : { chatOpen: true, verifyOpen: true },
+      narrow ? { outlineOpen: false, verifyOpen: false } : { verifyOpen: true },
       false,
       n('narrow'),
     );
   };
 
-  setChatOpen = (open: boolean) => {
-    this.#set(
-      open && this.#narrow ? { chatOpen: true, verifyOpen: false } : { chatOpen: open },
-      false,
-      n('setChatOpen'),
-    );
-  };
-
-  setVerifyOpen = (open: boolean) => {
-    this.#set(
-      open && this.#narrow ? { chatOpen: false, verifyOpen: true } : { verifyOpen: open },
-      false,
-      n('setVerifyOpen'),
-    );
-  };
+  setVerifyOpen = (verifyOpen: boolean) => this.#set({ verifyOpen }, false, n('setVerifyOpen'));
 
   setOutlineOpen = (outlineOpen: boolean) => this.#set({ outlineOpen }, false, n('outline'));
 
   setShowReal = (showReal: boolean) => this.#set({ showReal }, false, n('setShowReal'));
+
+  setVerifyView = (verifyView: VerifyView) => {
+    this.#set({ verifyView }, false, n('setVerifyView'));
+    if (verifyView === 'board') this.focus({ id: JOURNEY_GROUP, kind: 'group' });
+  };
 
   setPreviewState = (previewState: BoardPreviewState) => {
     this.#set({ previewState, selected: null }, false, n('setPreviewState'));
@@ -128,7 +133,7 @@ export class ArtboardActionImpl {
 
   select = (id: string | null) => {
     this.#set({ selected: id }, false, n('select'));
-    if (id && this.#get().mode === 'verify' && checkByFrame[id]) this.setVerifyOpen(true);
+    if (id && this.#get().mode === 'verify' && checkByNode[id]) this.setVerifyOpen(true);
   };
 
   openSticky = (id: string) => this.#set({ selected: id }, false, n('openSticky'));
@@ -137,41 +142,32 @@ export class ArtboardActionImpl {
     const resolved = { ...this.#get().resolved, [id]: text };
     const left = PENDING_NOTES.filter((note) => !resolved[note.id]).length;
     this.#set({ resolved }, false, n('resolve'));
-    this.#push({
-      quote: id,
-      role: 'user',
-      text: t('artboard.chat.decided', { ns: 'project', text }),
-    });
-    this.#push({ role: 'agent', text: AGENT_REPLIES.resolved(noteById[id].text, left) });
+    this.#user(t('artboard.chat.decided', { ns: 'project', text }), id);
+    this.#agent(AGENT_REPLIES.resolved(noteById[id].text, left));
   };
 
   send = (text: string) => {
     const { phase, resolved, revs, selected: quote } = this.#get();
     const finalized = phase === 'finalized';
-    this.#push({ quote, role: 'user', text });
-    this.#set({ typing: true }, false, n('sendStart'));
-    const done = (reply: string) => {
-      this.#set({ typing: false }, false, n('sendDone'));
-      this.#push({ role: 'agent', text: reply });
-    };
+    this.#user(text, quote);
     const note = quote ? noteById[quote] : undefined;
     const frame = quote ? frameById[quote] : undefined;
 
     if (note?.pending && !resolved[note.id]) {
-      this.#later(1000, () => {
+      this.#reply(1000, () => {
         this.#set((s) => ({ resolved: { ...s.resolved, [note.id]: text } }), false, n('resolve'));
-        done(AGENT_REPLIES.decidedInChat(text));
+        return AGENT_REPLIES.decidedInChat(text);
       });
       return;
     }
     if (frame && finalized && frame.group === JOURNEY_GROUP) {
-      this.#later(1200, () => done(AGENT_REPLIES.lockedChange(frame.id)));
+      this.#reply(1200, () => AGENT_REPLIES.lockedChange(frame.id));
       return;
     }
     if (frame) {
       const next = (revs[frame.id] ?? 1) + 1;
       this.#set((s) => ({ busy: [...s.busy, frame.id] }), false, n('busy'));
-      this.#later(2600, () => {
+      this.#reply(2600, () => {
         this.#set(
           (s) => ({
             busy: s.busy.filter((x) => x !== frame.id),
@@ -181,13 +177,13 @@ export class ArtboardActionImpl {
           false,
           n('revise'),
         );
-        done(AGENT_REPLIES.revised(frame.id, next));
         this.focus({ id: frame.id, kind: 'frame' });
         this.#later(1700, () => this.#set({ flash: null }, false, n('flashDone')));
+        return AGENT_REPLIES.revised(frame.id, next);
       });
       return;
     }
-    this.#later(1200, () => done(AGENT_LINES.generic));
+    this.#reply(1200, () => AGENT_LINES.generic);
   };
 
   replay = () => {
@@ -195,32 +191,27 @@ export class ArtboardActionImpl {
     this.#set(
       {
         ...initialState,
-        chatOpen: !this.#narrow,
-        messages: [{ ...OPENING_USER, id: 'opening' }],
         outlineOpen: this.#get().outlineOpen,
-        replayed: true,
-        revs: {},
-        typing: true,
         verifyOpen: false,
         visible: [],
       },
       false,
       n('replay'),
     );
+    this.#user(OPENING_USER);
+    const opening = startAgentReply();
     this.#later(1000, () => {
-      this.#push({ role: 'agent', text: AGENT_LINES.boardOpen });
+      const toolMessageId = opening(AGENT_LINES.boardOpen, BOARD_CARD);
+      if (toolMessageId) openBoardPanel(toolMessageId);
       this.#show(['n-title', 'n-goal']);
       this.focus({ kind: 'all' });
     });
     this.#later(1500, () => this.focus({ id: JOURNEY_GROUP, kind: 'group' }));
     ['j-1', 'j-2', 'j-3', 'j-4', 'j-5'].forEach((id, i) => this.#draw(id, 1800 + i * 650));
-    this.#later(5300, () => {
-      this.#push({ role: 'agent', text: AGENT_LINES.options });
-      this.focus({ id: 'g2', kind: 'group' });
-    });
+    this.#later(5300, () => this.focus({ id: 'g2', kind: 'group' }));
     ['o-a', 'o-b', 'o-c'].forEach((id, i) => this.#draw(id, 5800 + i * 650));
     this.#later(7900, () => this.#show(['s-1']));
-    this.#later(8600, () => this.#push({ role: 'user', text: AGENT_LINES.userRefs }));
+    this.#later(8600, () => this.#user(USER_LINES.refs));
     this.#later(9200, () => this.focus({ id: 'g3', kind: 'group' }));
     ['r-1', 'r-2'].forEach((id, i) =>
       this.#later(9500 + i * 400, () => {
@@ -233,19 +224,16 @@ export class ArtboardActionImpl {
       this.#set({ agentAt: 's-2' }, false, n('cursor'));
     });
     this.#later(11_400, () => {
-      this.#set({ agentAt: null, typing: false, visible: ALL_ITEM_IDS }, false, n('replayDone'));
-      this.#push({ card: BOARD_CARD, role: 'agent', text: AGENT_LINES.boardDone });
+      this.#set({ agentAt: null, visible: ALL_ITEM_IDS }, false, n('replayDone'));
+      this.#agent(AGENT_LINES.boardDone);
       this.focus({ kind: 'all' });
     });
   };
 
   finalize = () => {
-    this.#set(
-      { phase: 'finalized', results: PENDING_RESULTS, selected: null },
-      false,
-      n('finalize'),
-    );
-    this.#push({ card: ACCEPTANCE_CARD, role: 'agent', text: AGENT_LINES.finalized });
+    this.#set({ phase: 'finalized', run: null, selected: null }, false, n('finalize'));
+    this.#user(USER_LINES.finalize);
+    this.#agent(AGENT_LINES.finalized, ACCEPTANCE_CARD);
     toast.success(t('artboard.finalize.success', { ns: 'project' }));
     this.focus({ id: JOURNEY_GROUP, kind: 'group' });
   };
@@ -253,39 +241,36 @@ export class ArtboardActionImpl {
   setMode = (mode: BoardMode) => {
     this.#set({ mode, selected: null }, false, n('setMode'));
     if (mode === 'verify') {
-      this.#set({ outlineOpen: false }, false, n('verifyEnter'));
-      this.setVerifyOpen(true);
+      this.#set({ outlineOpen: false, verifyOpen: !this.#narrow }, false, n('verifyEnter'));
       this.focus({ id: JOURNEY_GROUP, kind: 'group' });
-    } else this.focus({ kind: 'all' });
+    } else {
+      this.focus({ kind: 'all' });
+    }
   };
 
   fillResults = () => {
-    this.#set({ typing: true }, false, n('fillStart'));
-    this.#later(1600, () => {
-      this.#set(
-        { filled: true, results: FILLED_RESULTS, showReal: true, typing: false },
-        false,
-        n('fillDone'),
-      );
-      this.#push({ role: 'agent', text: AGENT_LINES.filled });
+    this.#user(USER_LINES.buildDone);
+    this.#reply(1600, () => {
+      this.#set({ run: BUILD_RUN, showReal: true }, false, n('fillDone'));
       this.focus({ id: JOURNEY_GROUP, kind: 'group' });
+      return AGENT_LINES.filled;
     });
   };
 
-  review = (frameId: string, verdict: ReviewVerdict) => {
-    const check = checkByFrame[frameId];
-    this.#set((s) => ({ reviews: { ...s.reviews, [frameId]: verdict } }), false, n('review'));
-    if (verdict === 'accept') {
+  review = (frameId: string, review: AcceptanceFlowReview) => {
+    const check = checkByNode[frameId];
+    this.#set(
+      (s) => (s.run ? { run: reviewNode(s.run, frameId, review) } : {}),
+      false,
+      n('review'),
+    );
+    if (review === 'accepted') {
       toast.success(t('artboard.verify.accepted', { id: check.id, ns: 'project' }));
       return;
     }
-    const failed = this.#get().results[frameId]?.status === 'failed';
-    this.#push({
-      quote: frameId,
-      role: 'user',
-      text: failed ? REVIEW_LINES.rejectFailed : REVIEW_LINES.recheck,
-    });
-    this.#push({ role: 'agent', text: AGENT_REPLIES.rejected(check.id) });
+    const failed = nodeState(this.#get().run, frameId) === 'failed';
+    this.#user(failed ? REVIEW_LINES.rejectFailed : REVIEW_LINES.recheck, frameId);
+    this.#agent(AGENT_REPLIES.rejected(check.id));
     toast.info(t('artboard.verify.rejected', { id: check.id, ns: 'project' }));
   };
 

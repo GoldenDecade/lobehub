@@ -2,9 +2,10 @@ import { cssVar } from '@lobehub/ui/stylex/cssVar.stylex';
 
 import { sx } from '@/styles/sx';
 
+import { type FlowNodeState, nodeState } from '../fixture/acceptanceFlow';
 import { ARROWS } from '../fixture/board';
 import { useArtboardStore } from '../store';
-import type { BoardArrow, CheckResult } from '../types';
+import type { BoardArrow } from '../types';
 import { canvasStyles } from './styles';
 
 interface EdgeTone {
@@ -16,11 +17,11 @@ interface EdgeTone {
 const toneOf = (
   arrow: BoardArrow,
   verify: boolean,
-  results: Record<string, CheckResult>,
+  states: Record<string, FlowNodeState>,
   hot: string | null,
 ): EdgeTone => {
   if (verify) {
-    const ends = [results[arrow.from]?.status, results[arrow.to]?.status];
+    const ends = [states[arrow.from], states[arrow.to]];
     if (ends.includes('failed')) return { color: cssVar.colorError, strong: true };
     if (ends.every((x) => x === 'passed')) return { color: cssVar.colorSuccess, strong: true };
     return { color: cssVar.colorTextQuaternary, dash: '8 6', strong: false };
@@ -31,14 +32,17 @@ const toneOf = (
 };
 
 const Edges = ({ k }: { k: number }) => {
-  const { hot, results, verify, visible } = useArtboardStore((s) => ({
+  const { hot, run, verify, visible } = useArtboardStore((s) => ({
     hot: s.mode === 'discuss' ? s.selected : null,
-    results: s.results,
+    run: s.run,
     verify: s.mode === 'verify',
     visible: s.visible,
   }));
+  const states = Object.fromEntries(
+    ARROWS.flatMap((a) => [a.from, a.to]).map((id) => [id, nodeState(run, id)]),
+  );
   const shown = ARROWS.filter((a) => visible.includes(a.from) && visible.includes(a.to)).map(
-    (a) => ({ arrow: a, tone: toneOf(a, verify, results, hot) }),
+    (a) => ({ arrow: a, tone: toneOf(a, verify, states, hot) }),
   );
 
   return (

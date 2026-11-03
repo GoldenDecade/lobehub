@@ -4,7 +4,7 @@ import * as stylex from '@stylexjs/stylex';
 import { Link2Icon, XIcon } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
-import { CHECKS, frameById } from '../fixture/board';
+import { JOURNEY_CHECKS, nodeReview, nodeState } from '../fixture/acceptanceFlow';
 import StatusTag from '../StatusTag';
 import { artboardActions, artboardSelectors, useArtboardStore } from '../store';
 import CheckDetail from './CheckDetail';
@@ -48,45 +48,46 @@ const styles = stylex.create({
 
 const CheckList = () => {
   const { t } = useTranslation('project');
-  const { counts, filled, results, reviews } = useArtboardStore((s) => ({
+  const { counts, run } = useArtboardStore((s) => ({
     counts: artboardSelectors.resultCounts(s),
-    filled: s.filled,
-    results: s.results,
-    reviews: s.reviews,
+    run: s.run,
   }));
 
   return (
     <Flexbox gap={10}>
       <Text style={{ fontSize: 12 }} type="secondary">
-        {filled ? t('artboard.verify.summary', counts) : t('artboard.verify.waiting')}
+        {run ? t('artboard.verify.summary', counts) : t('artboard.verify.waiting')}
       </Text>
-      {CHECKS.map((check) => (
-        <Flexbox
-          gap={8}
-          key={check.id}
-          {...stylex.props(styles.check)}
-          onClick={() => artboardActions.focusItem(check.frame)}
-        >
-          <Flexbox horizontal align="flex-start" gap={8}>
-            <StatusTag status={results[check.frame].status} />
-            <Text style={{ flex: 1, minWidth: 0 }}>{check.title}</Text>
+      {JOURNEY_CHECKS.map((check) => {
+        const review = nodeReview(run, check.nodeId);
+        return (
+          <Flexbox
+            gap={8}
+            key={check.id}
+            {...stylex.props(styles.check)}
+            onClick={() => artboardActions.focusItem(check.nodeId)}
+          >
+            <Flexbox horizontal align="flex-start" gap={8}>
+              <StatusTag state={nodeState(run, check.nodeId)} />
+              <Text style={{ flex: 1, minWidth: 0 }}>{check.definition.expected}</Text>
+            </Flexbox>
+            <Flexbox horizontal align="center" gap={8}>
+              <Tag icon={<Icon icon={Link2Icon} />} size={'small'}>
+                {check.nodeId} · {check.title}
+              </Tag>
+              {review && (
+                <Text style={{ fontSize: 12 }} type="secondary">
+                  {t(
+                    review === 'accepted'
+                      ? 'artboard.verify.reviewedTag'
+                      : 'artboard.verify.rejectedTag',
+                  )}
+                </Text>
+              )}
+            </Flexbox>
           </Flexbox>
-          <Flexbox horizontal align="center" gap={8}>
-            <Tag icon={<Icon icon={Link2Icon} />} size={'small'}>
-              {check.frame} · {frameById[check.frame].title}
-            </Tag>
-            {reviews[check.frame] && (
-              <Text style={{ fontSize: 12 }} type="secondary">
-                {t(
-                  reviews[check.frame] === 'accept'
-                    ? 'artboard.verify.reviewedTag'
-                    : 'artboard.verify.rejectedTag',
-                )}
-              </Text>
-            )}
-          </Flexbox>
-        </Flexbox>
-      ))}
+        );
+      })}
     </Flexbox>
   );
 };

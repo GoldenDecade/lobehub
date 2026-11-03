@@ -2,7 +2,6 @@ import { Navigate, type RouteObject, useLocation, useParams } from 'react-router
 
 import { goalsRouteMeta } from '@/features/AgentGoals/routeMeta';
 import { tasksRouteMeta } from '@/features/AgentTasks/routeMeta';
-import { artboardRouteMeta } from '@/features/Artboard/routeMeta';
 import { channelRouteMeta } from '@/features/Channels/routeMeta';
 import { dashboardRouteMeta, dashboardsRouteMeta } from '@/features/Dashboard/routeMeta';
 import {
@@ -112,25 +111,6 @@ export const projectWorkspaceRoute: RouteObject = {
         { preloadId: 'dashboard' },
       ),
       path: 'dashboard',
-    },
-    {
-      children: [
-        {
-          element: dynamicElement(
-            () => import('@/routes/(main)/project/[projectId]/artboard'),
-            'Desktop > Project Artboard',
-            { preloadId: 'artboard' },
-          ),
-          handle: { meta: artboardRouteMeta },
-          index: true,
-        },
-      ],
-      element: dynamicLayout(
-        () => import('@/routes/(main)/project/[projectId]/artboard/_layout'),
-        'Desktop > Project Artboard > Layout',
-        { preloadId: 'artboard' },
-      ),
-      path: 'artboard',
     },
     projectAcceptanceRoute,
   ],

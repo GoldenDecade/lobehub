@@ -4,12 +4,13 @@ import { CircleDashedIcon, Loader2Icon } from 'lucide-react';
 import { memo } from 'react';
 import { useTranslation } from 'react-i18next';
 
+import { flowStateColor } from '@/features/Acceptance/Viewer/Flow/FlowNode';
 import { sx } from '@/styles/sx';
 
-import { ARROWS, checkByFrame, frameById, JOURNEY_GROUP } from '../fixture/board';
+import { checkByNode } from '../fixture/acceptanceFlow';
+import { ARROWS, frameById, JOURNEY_GROUP } from '../fixture/board';
 import { SCREENS } from '../fixture/screens';
-import { STATUS_META } from '../StatusTag';
-import { artboardActions, useArtboardStore } from '../store';
+import { artboardActions, artboardSelectors, useArtboardStore } from '../store';
 import type { BoardFrame, ScreenKey } from '../types';
 import FrameLabel from './FrameLabel';
 import { canvasStyles } from './styles';
@@ -67,25 +68,28 @@ const FrameNode = ({ frame, k }: { frame: BoardFrame; k: number }) => {
   const { t } = useTranslation('project');
   const s = useArtboardStore((st) => ({
     busy: st.busy.includes(frame.id),
-    comments: st.messages.filter((m) => m.role === 'user' && m.quote === frame.id).length,
+    comments: st.comments[frame.id] ?? 0,
     drawing: st.drawing.includes(frame.id),
     finalized: st.phase === 'finalized',
     flash: st.flash === frame.id,
     related: st.mode === 'discuss' && isRelated(st.selected, frame.id),
-    result: st.results[frame.id],
+    filled: !!st.run,
     rev: st.revs[frame.id] ?? 1,
     selected: st.selected === frame.id,
     showReal: st.showReal,
+    state: artboardSelectors.stateOf(frame.id)(st),
     verify: st.mode === 'verify',
   }));
 
   const muted = s.verify && frame.group !== JOURNEY_GROUP;
-  const border = s.verify && s.result && !muted ? STATUS_META[s.result.status].tone : undefined;
-  const showShot = s.verify && s.showReal && !!s.result;
+  const check = checkByNode[frame.id];
+  const border = s.verify && check && !muted ? flowStateColor(s.state) : undefined;
+  const showShot = s.verify && s.showReal && s.filled && !!check;
+  const hasShot = !!s.state && s.state !== 'blocked';
 
   const body = (() => {
     if (s.drawing) return <Drawing />;
-    if (showShot && !s.result?.shot) return <NoShot />;
+    if (showShot && !hasShot) return <NoShot />;
     return <FrameBody real={showShot} rev={s.rev} screen={frame.screen} />;
   })();
 
@@ -106,9 +110,9 @@ const FrameNode = ({ frame, k }: { frame: BoardFrame; k: number }) => {
         comments={s.comments}
         frame={frame}
         k={k}
-        linked={s.finalized ? checkByFrame[frame.id]?.id : undefined}
-        result={s.result}
+        linked={s.finalized ? check?.id : undefined}
         rev={s.rev}
+        state={s.state}
         verify={s.verify}
       />
       <div
@@ -124,7 +128,7 @@ const FrameNode = ({ frame, k }: { frame: BoardFrame; k: number }) => {
         )}
       >
         {body}
-        {showShot && s.result?.shot && (
+        {showShot && hasShot && (
           <div {...stylex.props(canvasStyles.shotChip)}>{t('artboard.frame.realShot')}</div>
         )}
         {s.busy && (

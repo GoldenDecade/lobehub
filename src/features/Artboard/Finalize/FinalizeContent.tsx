@@ -4,7 +4,8 @@ import * as stylex from '@stylexjs/stylex';
 import { LockIcon } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
-import { CHECKS, PENDING_NOTES } from '../fixture/board';
+import { JOURNEY_CHECKS } from '../fixture/acceptanceFlow';
+import { PENDING_NOTES } from '../fixture/board';
 import { artboardActions, artboardSelectors, useArtboardStore } from '../store';
 import PendingItem from './PendingItem';
 
@@ -45,15 +46,15 @@ const FinalizeContent = () => {
         ))}
       </Flexbox>
       <Flexbox gap={4}>
-        <Text strong>{t('artboard.finalize.checksTitle', { count: CHECKS.length })}</Text>
-        {CHECKS.map((check) => (
+        <Text strong>{t('artboard.finalize.checksTitle', { count: JOURNEY_CHECKS.length })}</Text>
+        {JOURNEY_CHECKS.map((check) => (
           <Flexbox horizontal align="center" gap={8} key={check.id} {...stylex.props(styles.check)}>
             <Text code style={{ fontSize: 12 }} type="secondary">
               {check.id}
             </Text>
-            <Text style={{ flex: 1, minWidth: 0 }}>{check.title}</Text>
+            <Text style={{ flex: 1, minWidth: 0 }}>{check.definition.expected}</Text>
             <Tag size={'small'}>
-              {check.frame} · v{revs[check.frame] ?? 1}
+              {check.nodeId} · v{revs[check.nodeId] ?? 1}
             </Tag>
           </Flexbox>
         ))}

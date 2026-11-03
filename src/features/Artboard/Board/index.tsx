@@ -7,10 +7,11 @@ import { useSize } from 'ahooks';
 import { type ReactNode, useEffect, useRef } from 'react';
 
 import Canvas from '../Canvas';
-import ChatPanel from '../Chat';
 import PlayOverlay from '../Play';
 import { artboardActions, useArtboardStore } from '../store';
 import VerifyPanel from '../Verify';
+import FlowStage from '../Verify/FlowStage';
+import Composer from './Composer';
 import Header from './Header';
 import Outline from './Outline';
 import { GeneratingBar, PreviewStateBar, VerifyBar } from './StageBars';
@@ -44,10 +45,11 @@ const Stage = ({ narrow }: { narrow: boolean }) => {
   const stageRef = useRef<HTMLDivElement>(null);
   const stageSize = useSize(stageRef);
   const showPreviewBar = !narrow && !!stageSize && stageSize.width >= PREVIEW_BAR_MIN_STAGE;
-  const { mode, outlineOpen, previewState } = useArtboardStore((s) => ({
+  const { mode, outlineOpen, previewState, verifyView } = useArtboardStore((s) => ({
     mode: s.mode,
     outlineOpen: s.outlineOpen,
     previewState: s.previewState,
+    verifyView: s.verifyView,
   }));
 
   if (previewState === 'empty' || previewState === 'error')
@@ -60,11 +62,12 @@ const Stage = ({ narrow }: { narrow: boolean }) => {
 
   return (
     <div ref={stageRef} {...stylex.props(styles.stage)}>
-      <Canvas narrow={narrow} />
+      {mode === 'verify' && verifyView === 'flow' ? <FlowStage /> : <Canvas narrow={narrow} />}
       {outlineOpen && !narrow && mode === 'discuss' && <Outline />}
+      <Composer />
       {mode === 'verify' && <VerifyBar />}
       {previewState === 'generating' && mode === 'discuss' && <GeneratingBar />}
-      {showPreviewBar && <PreviewStateBar />}
+      {showPreviewBar && mode === 'discuss' && <PreviewStateBar />}
     </div>
   );
 };
@@ -73,35 +76,32 @@ const SidePanel = ({
   children,
   narrow,
   open,
-  placement,
 }: {
   children: ReactNode;
   narrow: boolean;
   open: boolean;
-  placement: 'left' | 'right';
 }) => {
   if (narrow) return open ? <div {...stylex.props(styles.sheet)}>{children}</div> : null;
   return (
     <DraggablePanel
       backgroundColor={cssVar.colorBgContainer}
-      defaultSize={{ height: '100%', width: placement === 'left' ? 360 : 380 }}
+      defaultSize={{ height: '100%', width: 360 }}
       expand={open}
       expandable={false}
-      maxWidth={560}
+      maxWidth={520}
       minWidth={300}
-      placement={placement}
+      placement={'right'}
     >
       {children}
     </DraggablePanel>
   );
 };
 
-const ArtboardPage = () => {
+const BoardView = () => {
   const rootRef = useRef<HTMLDivElement>(null);
   const size = useSize(rootRef);
   const narrow = !!size && size.width < NARROW_WIDTH;
-  const { chatOpen, mode, verifyOpen } = useArtboardStore((s) => ({
-    chatOpen: s.chatOpen,
+  const { mode, verifyOpen } = useArtboardStore((s) => ({
     mode: s.mode,
     verifyOpen: s.verifyOpen,
   }));
@@ -110,18 +110,13 @@ const ArtboardPage = () => {
     if (size) artboardActions.setNarrow(narrow);
   }, [narrow, size]);
 
-  useEffect(() => () => artboardActions.reset(), []);
-
   return (
     <Flexbox flex={1} height={'100%'} ref={rootRef} style={{ minWidth: 0 }}>
       <Header narrow={narrow} />
       <div {...stylex.props(styles.body)}>
-        <SidePanel narrow={narrow} open={chatOpen} placement={'left'}>
-          <ChatPanel onClose={narrow ? () => artboardActions.setChatOpen(false) : undefined} />
-        </SidePanel>
         <Stage narrow={narrow} />
         {mode === 'verify' && (
-          <SidePanel narrow={narrow} open={verifyOpen} placement={'right'}>
+          <SidePanel narrow={narrow} open={verifyOpen}>
             <VerifyPanel
               onClose={narrow ? () => artboardActions.setVerifyOpen(false) : undefined}
             />
@@ -133,4 +128,4 @@ const ArtboardPage = () => {
   );
 };
 
-export default ArtboardPage;
+export default BoardView;

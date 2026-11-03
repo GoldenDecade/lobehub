@@ -1,32 +1,36 @@
-import { checkByFrame, frameById, JOURNEY_GROUP, PENDING_NOTES } from '../fixture/board';
+import { checkByNode, JOURNEY_FLOW, nodeReview, nodeState } from '../fixture/acceptanceFlow';
+import { frameById, JOURNEY_GROUP, PENDING_NOTES } from '../fixture/board';
 import type { ArtboardState } from './initialState';
-
-const commentCounts = (s: ArtboardState) => {
-  const counts: Record<string, number> = {};
-  for (const m of s.messages) {
-    if (m.role === 'user' && m.quote) counts[m.quote] = (counts[m.quote] ?? 0) + 1;
-  }
-  return counts;
-};
 
 const pendingLeft = (s: ArtboardState) => PENDING_NOTES.filter((n) => !s.resolved[n.id]).length;
 
 const resultCounts = (s: ArtboardState) => {
-  const counts = { failed: 0, passed: 0, pending: 0 };
-  for (const r of Object.values(s.results)) counts[r.status] += 1;
+  const counts = { blocked: 0, failed: 0, passed: 0, pending: 0 };
+  for (const node of JOURNEY_FLOW.nodes) {
+    const state = nodeState(s.run, node.id);
+    if (state === 'passed' || state === 'failed') counts[state] += 1;
+    else if (state) counts.blocked += 1;
+    else counts.pending += 1;
+  }
   return counts;
 };
+
+const stateOf = (id: string) => (s: ArtboardState) =>
+  checkByNode[id] ? nodeState(s.run, id) : undefined;
+
+const reviewOf = (id: string) => (s: ArtboardState) => nodeReview(s.run, id);
 
 const isQuoteLocked = (s: ArtboardState) =>
   s.phase === 'finalized' && !!s.selected && frameById[s.selected]?.group === JOURNEY_GROUP;
 
 const selectedCheckFrame = (s: ArtboardState) =>
-  s.selected && checkByFrame[s.selected] ? s.selected : null;
+  s.selected && checkByNode[s.selected] ? s.selected : null;
 
 export const artboardSelectors = {
-  commentCounts,
   isQuoteLocked,
   pendingLeft,
   resultCounts,
+  reviewOf,
   selectedCheckFrame,
+  stateOf,
 };

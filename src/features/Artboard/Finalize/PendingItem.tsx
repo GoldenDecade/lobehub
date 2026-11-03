@@ -3,7 +3,7 @@ import { cssVar } from '@lobehub/ui/stylex/cssVar.stylex';
 import * as stylex from '@stylexjs/stylex';
 import { useTranslation } from 'react-i18next';
 
-import { focusChatInput } from '../Chat/focusChatInput';
+import { focusComposer } from '../Board/focusComposer';
 import { noteById } from '../fixture/board';
 import { artboardActions, useArtboardStore } from '../store';
 
@@ -62,7 +62,7 @@ const PendingItem = ({ noteId, onDiscuss, onResolved }: PendingItemProps) => {
                 onDiscuss();
                 artboardActions.openSticky(noteId);
                 artboardActions.focusItem(noteId);
-                focusChatInput();
+                focusComposer();
               }}
             >
               {t('artboard.resolve.discuss')}

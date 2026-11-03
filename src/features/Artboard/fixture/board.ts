@@ -1,4 +1,4 @@
-import type { BoardArrow, BoardCheck, BoardFrame, BoardGroup, BoardNote } from '../types';
+import type { BoardArrow, BoardFrame, BoardGroup, BoardNote } from '../types';
 
 // Canvas/styles.ts repeats these as literals: StyleX only compiles static values.
 export const FRAME_W = 640;
@@ -113,14 +113,6 @@ export const NOTES: BoardNote[] = [
   },
 ];
 
-export const CHECKS: BoardCheck[] = [
-  { frame: 'j-1', id: 'c-1', title: '第一次进入项目，能看到「接入资料」入口' },
-  { frame: 'j-2', id: 'c-2', title: '可以同时选择代码仓库、文档、网页三种来源' },
-  { frame: 'j-3', id: 'c-3', title: '读取中显示进度和预计时间，离开页面不会中断' },
-  { frame: 'j-5', id: 'c-4', title: '读取失败时说明原因，可以重新上传或跳过' },
-  { frame: 'j-4', id: 'c-5', title: '读取完成后看到资料摘要和推荐的第一件事' },
-];
-
 export const JOURNEY_ORDER = ['j-1', 'j-2', 'j-3', 'j-5', 'j-4'];
 
 export const PLAY_NEXT: Record<string, Partial<Record<string, string>>> = {
@@ -134,9 +126,6 @@ export const frameById: Record<string, BoardFrame> = Object.fromEntries(
   FRAMES.map((f) => [f.id, f]),
 );
 export const noteById: Record<string, BoardNote> = Object.fromEntries(NOTES.map((n) => [n.id, n]));
-export const checkByFrame: Record<string, BoardCheck> = Object.fromEntries(
-  CHECKS.map((c) => [c.frame, c]),
-);
 export const PENDING_NOTES = NOTES.filter((n) => n.pending);
 export const ALL_ITEM_IDS = [...FRAMES.map((f) => f.id), ...NOTES.map((n) => n.id)];
 

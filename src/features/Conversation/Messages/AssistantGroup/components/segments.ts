@@ -2,7 +2,7 @@ import type { AssistantGroupSegment } from '@lobechat/conversation-flow';
 
 import { LOADING_FLAT } from '@/const/message';
 
-import { isImageOutputTool } from '../toolRenderRules';
+import { isDeliverableTool } from '../toolRenderRules';
 import type { RenderableAssistantContentBlock } from './types';
 import type { WorkflowExpandLevel, WorkflowExpandLevelDefault } from './WorkflowCollapse';
 
@@ -74,7 +74,7 @@ export const shouldFoldProcess = ({
   processSegments.some((segment) => segment.kind === 'workflow') &&
   !processSegments.some((segment) =>
     (segment.kind === 'answer' ? [segment.block] : segment.blocks).some((block) =>
-      block.tools?.some(isImageOutputTool),
+      block.tools?.some(isDeliverableTool),
     ),
   );
 

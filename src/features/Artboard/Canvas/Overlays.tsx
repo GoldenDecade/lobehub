@@ -13,7 +13,7 @@ import { useTranslation } from 'react-i18next';
 
 import { sx } from '@/styles/sx';
 
-import { focusChatInput } from '../Chat/focusChatInput';
+import { focusComposer } from '../Board/focusComposer';
 import { FRAME_W, frameById } from '../fixture/board';
 import { artboardActions, useArtboardStore } from '../store';
 import type { ViewState } from './useViewport';
@@ -72,7 +72,7 @@ export const SelectionBar = ({ view }: { view: ViewState }) => {
         icon={MessageSquareIcon}
         size={'small'}
         title={t('artboard.selection.discuss')}
-        onClick={focusChatInput}
+        onClick={focusComposer}
       />
     </Flexbox>
   );

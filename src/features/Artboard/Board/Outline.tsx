@@ -5,7 +5,7 @@ import { useTranslation } from 'react-i18next';
 
 import { floatStyles } from '../Canvas/Overlays';
 import { FRAMES, GROUPS } from '../fixture/board';
-import { artboardActions, artboardSelectors, useArtboardStore } from '../store';
+import { artboardActions, useArtboardStore } from '../store';
 
 const styles = stylex.create({
   group: {
@@ -45,7 +45,7 @@ const styles = stylex.create({
 const Outline = () => {
   const { t } = useTranslation('project');
   const { counts, selected, visible } = useArtboardStore((s) => ({
-    counts: artboardSelectors.commentCounts(s),
+    counts: s.comments,
     selected: s.selected,
     visible: s.visible,
   }));

@@ -4,6 +4,7 @@ import { Flexbox, Text } from '@lobehub/ui';
 import { memo } from 'react';
 
 import ConversationSegmentSkeleton from '@/components/Skeleton/Conversation/Segment';
+import { ArtboardDemoButton } from '@/features/Artboard';
 import ConversationWorkspace from '@/features/Conversation/Workspace';
 import NavHeader from '@/features/NavHeader';
 import ChatConversation from '@/routes/(main)/agent/features/Conversation';
@@ -31,6 +32,7 @@ const ProjectConversation = memo(() => {
           }
           right={
             <Flexbox horizontal align="center" gap={4}>
+              <ArtboardDemoButton />
               <TerminalPanelToggle />
               <WorkingPanelToggle />
               {topic && <ProjectTopicActions topic={topic} />}

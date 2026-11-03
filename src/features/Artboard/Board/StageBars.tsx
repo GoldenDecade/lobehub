@@ -5,7 +5,7 @@ import { useTranslation } from 'react-i18next';
 
 import { floatStyles } from '../Canvas/Overlays';
 import { artboardActions, useArtboardStore } from '../store';
-import type { BoardPreviewState } from '../types';
+import type { BoardPreviewState, VerifyView } from '../types';
 
 const styles = stylex.create({
   center: {
@@ -22,10 +22,11 @@ const styles = stylex.create({
 
 export const VerifyBar = () => {
   const { t } = useTranslation('project');
-  const { filled, showReal, typing } = useArtboardStore((s) => ({
-    filled: s.filled,
+  const { filled, showReal, typing, verifyView } = useArtboardStore((s) => ({
+    filled: !!s.run,
     showReal: s.showReal,
     typing: s.typing,
+    verifyView: s.verifyView,
   }));
 
   return (
@@ -33,33 +34,41 @@ export const VerifyBar = () => {
       horizontal
       align="center"
       gap={8}
+      justify="center"
       paddingInline={8}
+      wrap="wrap"
       {...stylex.props(floatStyles.float, styles.center)}
     >
+      <Segmented
+        size={'small'}
+        value={verifyView}
+        options={[
+          { label: t('artboard.verifyBar.flow'), value: 'flow' },
+          { label: t('artboard.verifyBar.board'), value: 'board' },
+        ]}
+        onChange={(value) => artboardActions.setVerifyView(value as VerifyView)}
+      />
       {filled ? (
-        <Segmented
-          size={'small'}
-          value={showReal ? 'real' : 'reference'}
-          options={[
-            { label: t('artboard.verifyBar.reference'), value: 'reference' },
-            { label: t('artboard.verifyBar.real'), value: 'real' },
-          ]}
-          onChange={(value) => artboardActions.setShowReal(value === 'real')}
-        />
-      ) : (
-        <>
-          <Text ellipsis style={{ flex: 1, fontSize: 12, minWidth: 0 }} type="secondary">
-            {t('artboard.verifyBar.waiting')}
-          </Text>
-          <Button
-            icon={WandSparklesIcon}
-            loading={typing}
+        verifyView === 'board' && (
+          <Segmented
             size={'small'}
-            onClick={artboardActions.fillResults}
-          >
-            {t('artboard.verifyBar.simulate')}
-          </Button>
-        </>
+            value={showReal ? 'real' : 'reference'}
+            options={[
+              { label: t('artboard.verifyBar.reference'), value: 'reference' },
+              { label: t('artboard.verifyBar.real'), value: 'real' },
+            ]}
+            onChange={(value) => artboardActions.setShowReal(value === 'real')}
+          />
+        )
+      ) : (
+        <Button
+          icon={WandSparklesIcon}
+          loading={typing}
+          size={'small'}
+          onClick={artboardActions.fillResults}
+        >
+          {t('artboard.verifyBar.simulate')}
+        </Button>
       )}
     </Flexbox>
   );
