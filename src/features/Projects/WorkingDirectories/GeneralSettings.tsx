@@ -8,6 +8,7 @@ import { useWorkspaceAwareNavigate } from '@/features/Workspace/useWorkspaceAwar
 import type { ProjectDetail } from '@/store/project';
 
 import { isProjectSlugValid } from '../createProjectForm';
+import ProjectCreator from '../ProjectCreator';
 import { useProjectLogo, useSaveProjectField } from './useProjectGeneralSettings';
 
 const NAME_MAX = 255;
@@ -109,6 +110,16 @@ const IdentifierCard = ({ project }: CardProps) => {
   );
 };
 
+const CreatorCard = ({ project }: CardProps) => {
+  const { t } = useTranslation('project');
+
+  return (
+    <SettingCard title={t('settings.creator')}>
+      <ProjectCreator createdAt={project.createdAt} userId={project.userId} />
+    </SettingCard>
+  );
+};
+
 const SlugCard = ({ project }: CardProps) => {
   const { t } = useTranslation('project');
   const navigate = useWorkspaceAwareNavigate();
@@ -181,6 +192,7 @@ export function GeneralSettings({ project }: CardProps) {
       <IdentifierCard project={project} />
       <SlugCard project={project} />
       <DescriptionCard project={project} />
+      <CreatorCard project={project} />
     </Flexbox>
   );
 }
