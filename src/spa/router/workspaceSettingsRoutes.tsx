@@ -60,7 +60,12 @@ export const workspaceSettingsContentRoute: RouteObject = {
         () => import('@/routes/(main)/[workspaceSlug]/settings/members'),
         'Desktop > Workspace > Settings > Members > Detail',
       ),
-      handle: { meta: routeMeta({ Skeleton: createSurfaceSkeleton('detail') }) },
+      handle: {
+        meta: createWorkspaceSettingsRouteMeta(
+          WorkspaceSettingsTabs.Members,
+          createSurfaceSkeleton('detail'),
+        ),
+      },
       path: 'members/:memberId',
     },
     {
