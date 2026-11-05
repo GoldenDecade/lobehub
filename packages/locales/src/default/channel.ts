@@ -91,6 +91,10 @@ export default {
   'actionFailed': 'Something went wrong. Try again.',
   'send': 'Send',
   'sendFailed': 'Message was not sent. Your draft is preserved; try again.',
+  'outgoing.discard': 'Delete',
+  'outgoing.failed': 'Not sent',
+  'outgoing.retry': 'Retry',
+  'outgoing.sending': 'Sending…',
   'composer': 'Message #{{name}}',
   'threadComposer': 'Reply in thread',
   'stopReply': 'Stop reply',
@@ -199,7 +203,4 @@ export default {
   'reply.attachment': 'Attachment',
   'reply.viewOriginal': 'View original message',
   'reply.unavailable': 'Original message unavailable',
-  'reply.personHint': 'Quote only. No Agent will be triggered.',
-  'reply.agentHint': 'Continue in a thread with this Agent and any Agents you @mention.',
-  'reply.threadHint': 'Continue in this thread. Agents you @mention will also join.',
 };
