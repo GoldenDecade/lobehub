@@ -11,7 +11,7 @@ fi
 
 umask 077
 
-LOBE_IMAGE="${LOBE_IMAGE:-ghcr.io/goldendecade/lobehub:wq}"
+LOBE_IMAGE="${LOBE_IMAGE:-ghcr.nju.edu.cn/goldendecade/lobehub:wq}"
 
 key_vaults=$(openssl rand -base64 32)
 auth_secret=$(openssl rand -base64 32)
@@ -21,7 +21,12 @@ rustfs_access=$(openssl rand -hex 12)
 rustfs_secret=$(openssl rand -hex 24)
 searx_secret=$(openssl rand -hex 32)
 
-jwks=$(docker run --rm --entrypoint /bin/node "$LOBE_IMAGE" -e 'const c=require("crypto");const {privateKey,publicKey}=c.generateKeyPairSync("rsa",{modulusLength:2048});const meta={alg:"RS256",kid:c.randomBytes(8).toString("hex"),use:"sig"};process.stdout.write("JWKS_KEY="+JSON.stringify({keys:[{...privateKey.export({format:"jwk"}),...meta}]})+"\n");process.stdout.write("JWKS_PUBLIC_KEY="+JSON.stringify({keys:[{...publicKey.export({format:"jwk"}),...meta}]})+"\n")')
+NODE_SCRIPT='const c=require("crypto");const {privateKey,publicKey}=c.generateKeyPairSync("rsa",{modulusLength:2048});const meta={alg:"RS256",kid:c.randomBytes(8).toString("hex"),use:"sig"};process.stdout.write("JWKS_KEY="+JSON.stringify({keys:[{...privateKey.export({format:"jwk"}),...meta}]})+"\n");process.stdout.write("JWKS_PUBLIC_KEY="+JSON.stringify({keys:[{...publicKey.export({format:"jwk"}),...meta}]})+"\n")'
+if command -v node >/dev/null 2>&1; then
+  jwks=$(node -e "$NODE_SCRIPT")
+else
+  jwks=$(docker run --rm --entrypoint /bin/node "$LOBE_IMAGE" -e "$NODE_SCRIPT")
+fi
 
 jwks_key=$(printf '%s\n' "$jwks" | sed -n 's/^JWKS_KEY=//p')
 jwks_public=$(printf '%s\n' "$jwks" | sed -n 's/^JWKS_PUBLIC_KEY=//p')

@@ -11,7 +11,7 @@ ROOT=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)
 cd "$ROOT"
 
 DOMAIN="lobe.85718571.xyz"
-LOBE_IMAGE="${LOBE_IMAGE:-ghcr.io/goldendecade/lobehub:wq}"
+LOBE_IMAGE="${LOBE_IMAGE:-ghcr.nju.edu.cn/goldendecade/lobehub:wq}"
 
 fail() {
   echo "FAIL: $1" >&2
@@ -55,7 +55,9 @@ fi
 
 echo "== 生成密钥 =="
 if [ ! -f .env ]; then
-  docker pull "$LOBE_IMAGE"
+  if ! command -v node >/dev/null 2>&1; then
+    docker pull "$LOBE_IMAGE"
+  fi
   LOBE_IMAGE="$LOBE_IMAGE" sh scripts/render-env.sh
 fi
 

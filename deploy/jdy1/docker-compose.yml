@@ -1,7 +1,7 @@
 name: lobehub
 services:
   lobe:
-    image: ${LOBE_IMAGE:-ghcr.io/goldendecade/lobehub:wq}
+    image: ${LOBE_IMAGE:-ghcr.nju.edu.cn/goldendecade/lobehub:wq}
     container_name: lobehub
     ports:
       - '127.0.0.1:${LOBE_PORT}:3210'
@@ -57,7 +57,7 @@ services:
   #   `lh connect --gateway <url>`.
   # State is kept in memory: runs in flight are lost when this container restarts.
   gateway:
-    image: ghcr.io/lobehub/lobehub-gateway:0.5.0
+    image: ghcr.nju.edu.cn/lobehub/lobehub-gateway:0.5.0
     container_name: lobe-gateway
     ports:
       # jdy1: 8787 is taken by pico-wecom-bridge. Host port comes from .env (9989).
