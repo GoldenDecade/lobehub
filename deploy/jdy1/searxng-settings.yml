@@ -1,0 +1,37 @@
+use_default_settings: true
+
+general:
+  debug: false
+  instance_name: 'lobehub-jdy1'
+  privacypolicy_url: false
+  donation_url: false
+  contact_url: false
+  enable_metrics: false
+
+search:
+  safe_search: 0
+  autocomplete: ''
+  default_lang: 'auto'
+  formats:
+    - html
+    - json
+
+server:
+  port: 8080
+  bind_address: '0.0.0.0'
+  base_url: false
+  limiter: false
+  public_instance: false
+  secret_key: 'CHANGE_ME_AT_INSTALL'
+  image_proxy: false
+  method: 'POST'
+
+ui:
+  static_path: ''
+  default_theme: simple
+  default_locale: 'zh-Hans'
+
+outgoing:
+  request_timeout: 8.0
+  pool_connections: 20
+  pool_maxsize: 10
