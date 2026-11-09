@@ -7,6 +7,10 @@ on:
   push:
     branches:
       - wq
+    paths-ignore:
+      - 'deploy/**'
+      - 'docs/**'
+      - '*.md'
   workflow_dispatch:
     inputs:
       sync_upstream:
