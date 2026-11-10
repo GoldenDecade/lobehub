@@ -154,7 +154,7 @@
     "workflow:reset-onboarding": "tsx ./scripts/resetOnboarding/index.ts",
     "workflow:seed-user-info": "tsx ./scripts/seedUserInfo/index.ts",
     "workflow:set-desktop-version": "tsx ./scripts/electronWorkflow/setDesktopVersion.ts",
-    "wq": "bash -c 'set -euo pipefail; trap \"git checkout -- apps/desktop/package.json apps/desktop/shell/update/strings.json 2>/dev/null || true\" EXIT; export DESKTOP_PRODUCT_NAME=LobeHub-WQ DESKTOP_APP_ID=com.wq.lobehub-desktop DESKTOP_PROTOCOL_SCHEME=lobehub-wq; VERSION=$(node -p \"require(\\\"./package.json\\\").version\"); bun run scripts/electronWorkflow/setDesktopVersion.ts \"$VERSION\" stable; pnpm -C apps/desktop run package:local; ditto apps/desktop/release/mac-arm64/LobeHub-WQ.app /Applications/LobeHub-WQ.app; echo \"✅ 已打包并更新到 /Applications/LobeHub-WQ.app\"'"
+    "wq": "bash -c 'set -euo pipefail; trap \"git checkout -- apps/desktop/package.json apps/desktop/shell/update/strings.json 2>/dev/null || true\" EXIT; export DESKTOP_PRODUCT_NAME=LobeHub-WQ DESKTOP_APP_ID=com.wq.lobehub-desktop DESKTOP_PROTOCOL_SCHEME=lobehub-wq; VERSION=$(node -p \"require(\\\"./package.json\\\").version\"); bun run scripts/electronWorkflow/setDesktopVersion.ts \"$VERSION\" stable; mkdir -p apps/desktop/release && touch apps/desktop/release/.metadata_never_index; pnpm -C apps/desktop run package:local; rm -rf /Applications/LobeHub-WQ.app && ditto apps/desktop/release/mac-arm64/LobeHub-WQ.app /Applications/LobeHub-WQ.app && rm -rf apps/desktop/release/mac-arm64/*.app; echo \"✅ 已打包并更新到 /Applications/LobeHub-WQ.app\"'"
   },
   "lint-staged": {
     "*.md": [
