@@ -1249,11 +1249,6 @@ const exec = async (options: ExecOptions): Promise<void> => {
     pathEnv: resolvedCommand.pathEnv,
     topicId: options.topic,
   });
-  // Devin ACP's `--permission-mode` is a global flag; default to bypass so
-  // headless connected-device runs do not block on permission prompts. The mode
-  // response must not overwrite the model selected by `initialModel`.
-  const permissionMode = options.type === 'devin' ? 'bypass' : undefined;
-
   const spawnOptions = {
     agentType: options.type,
     askUserBridge: askBridge,
@@ -1272,7 +1267,6 @@ const exec = async (options: ExecOptions): Promise<void> => {
     // early makes print mode kill background tasks after 10 minutes.
     liveInput: options.type === 'claude-code',
     operationId,
-    permissionMode,
     uploadImage,
   };
 
