@@ -1,4 +1,5 @@
 import { type AgentState } from '@lobechat/agent-runtime';
+import type { AgentDocumentIndexSnapshot } from '@lobechat/context-engine/agent-document';
 import {
   type AgentShareVisitorContext,
   type CancelVirtualSubAgentParams,
@@ -43,6 +44,13 @@ export interface RuntimeExecutorContext {
    * tools: [] for an intermediate graph node and continue to another node.
    */
   allowEarlyFinalAnswerVisibleOutputEnd?: boolean;
+  /**
+   * Receives the agent-document index snapshot a step pinned (the run's first
+   * step, or a mid-run compression). `executeStep` writes it into
+   * `binding.agentDocumentIndex` of the state it saves, so later steps render
+   * the same index and change notes and keep the prompt-cache prefix.
+   */
+  bindAgentDocumentIndex?: (snapshot: AgentDocumentIndexSnapshot) => void;
   botContext?: unknown;
   /**
    * Callback to stop a running `lobe-agent.callSubAgent` child dispatched by
