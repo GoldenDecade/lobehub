@@ -30,6 +30,19 @@ import { useInstalledSkillsAndTools } from './useInstalledSkillsAndTools';
 
 type SlashItem = NonNullable<SlashOptions['items'] extends (infer U)[] ? U : never>;
 
+/**
+ * Skills agy (and only agy) expands from a message that starts with `/name`.
+ * They live outside the shared skill directories, so the runtime never sees
+ * them in `<available_skills>` and a `<skill>` tag would be sent verbatim.
+ */
+const CLI_SLASH_SKILL_SOURCES = new Set([
+  'antigravity-builtin',
+  'antigravity-global',
+  'antigravity-plugin',
+]);
+
+const isCliSlashSkill = (skill: ProjectSkillItem) => CLI_SLASH_SKILL_SOURCES.has(skill.source);
+
 interface SlashMenuOption {
   icon?: any;
   key: string;
@@ -87,12 +100,24 @@ export const useSlashActionItems = (): SlashOptions['items'] => {
   // Local desktop reads over IPC; a bound device reads over RPC. Either path
   // makes filesystem skills reachable even when this client isn't the desktop app
   // (previously gated on `isDesktop` alone, so remote/web runs got nothing).
+  // Only an Antigravity agent can expand agy's own `/name` skills, so only
+  // its scan asks for them. Other agents keep the shared filesystem scan.
+  const cliAgentType =
+    agencyConfig?.heterogeneousProvider?.type === 'antigravity' ? 'antigravity' : undefined;
   const projectSkillsEnabled = (isDesktop || !!remoteDeviceId) && !!workingDirectory;
   const projectSkillsDirectory = projectSkillsEnabled ? workingDirectory : undefined;
-  useToolStore((s) => s.useFetchProjectSkills)(projectSkillsDirectory, remoteDeviceId);
+  useToolStore((s) => s.useFetchProjectSkills)(
+    projectSkillsDirectory,
+    remoteDeviceId,
+    cliAgentType,
+  );
   const projectSkills = useToolStore(
     (s) =>
-      projectSkillsSelectors.getProjectSkills(projectSkillsDirectory, remoteDeviceId)(s)?.skills,
+      projectSkillsSelectors.getProjectSkills(
+        projectSkillsDirectory,
+        remoteDeviceId,
+        cliAgentType,
+      )(s)?.skills,
   );
 
   // Agent-document skill bundles (the "Agent skills" group in the working
@@ -137,26 +162,32 @@ export const useSlashActionItems = (): SlashOptions['items'] => {
         },
       });
 
-      const makeProjectSkillItem = (skill: ProjectSkillItem): SlashMenuOption => ({
-        // Slash is already implied by the trigger + tag color, so we render the
-        // bare skill name here. The markdown writer adds the `/` back on send.
-        icon: SkillsIcon,
-        key: `project-skill-${skill.name}`,
-        label: skill.name,
-        metadata: {
-          category: 'projectSkill',
-          description: skill.description,
-          type: skill.name,
-        },
-        onSelect: (editor: IEditor) => {
-          const payload: InsertActionTagPayload = {
-            category: 'projectSkill',
-            label: skill.name,
+      const makeProjectSkillItem = (skill: ProjectSkillItem): SlashMenuOption => {
+        // agy's own skills are not in the runtime's `<available_skills>` registry,
+        // so the chip must serialize as the literal `/name` agy expands. A
+        // filesystem skill stays a skill chip the runtime activates itself.
+        const category = isCliSlashSkill(skill) ? 'cliSkill' : 'projectSkill';
+        return {
+          // Slash is already implied by the trigger + tag color, so we render the
+          // bare skill name here.
+          icon: SkillsIcon,
+          key: `project-skill-${skill.name}`,
+          label: skill.name,
+          metadata: {
+            category,
+            description: skill.description,
             type: skill.name,
-          };
-          editor.dispatchCommand(INSERT_ACTION_TAG_COMMAND, payload);
-        },
-      });
+          },
+          onSelect: (editor: IEditor) => {
+            const payload: InsertActionTagPayload = {
+              category,
+              label: skill.name,
+              type: skill.name,
+            };
+            editor.dispatchCommand(INSERT_ACTION_TAG_COMMAND, payload);
+          },
+        };
+      };
 
       const makeSkillItem = (skill: ActionTagData): SlashMenuOption => ({
         icon: SkillsIcon,

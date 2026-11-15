@@ -150,12 +150,20 @@ describe('projectSkills replica', () => {
 
     fetchSkills(DEVICE_REPO);
     await waitFor(() =>
-      expect(listProjectSkills()).toHaveBeenCalledWith({ deviceId: 'device-1', scope: '/repo' }),
+      expect(listProjectSkills()).toHaveBeenCalledWith({
+        agentType: undefined,
+        deviceId: 'device-1',
+        scope: '/repo',
+      }),
     );
 
     fetchSkills(LOCAL_REPO);
     await waitFor(() =>
-      expect(listProjectSkills()).toHaveBeenCalledWith({ deviceId: undefined, scope: '/repo' }),
+      expect(listProjectSkills()).toHaveBeenCalledWith({
+        agentType: undefined,
+        deviceId: undefined,
+        scope: '/repo',
+      }),
     );
   });
 

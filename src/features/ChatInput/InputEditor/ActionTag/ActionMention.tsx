@@ -35,6 +35,7 @@ export interface ActionMentionProps {
 
 const CATEGORY_ICON: Record<ActionTagCategory, FC<any>> = {
   agentSkill: SkillsIcon,
+  cliSkill: SkillsIcon,
   command: TerminalIcon,
   projectSkill: SkillsIcon,
   skill: SkillsIcon,
@@ -48,6 +49,7 @@ const TYPE_ICON: Record<string, FC<any>> = {
 
 const CATEGORY_I18N_KEY: Record<ActionTagCategory, string> = {
   agentSkill: 'actionTag.category.agentSkill',
+  cliSkill: 'actionTag.category.cliSkill',
   command: 'actionTag.category.command',
   projectSkill: 'actionTag.category.projectSkill',
   skill: 'actionTag.category.skill',
@@ -56,6 +58,7 @@ const CATEGORY_I18N_KEY: Record<ActionTagCategory, string> = {
 
 const CATEGORY_TOOLTIP_I18N_KEY: Record<ActionTagCategory, string> = {
   agentSkill: 'actionTag.tooltip.agentSkill',
+  cliSkill: 'actionTag.tooltip.cliSkill',
   command: 'actionTag.tooltip.command',
   projectSkill: 'actionTag.tooltip.projectSkill',
   skill: 'actionTag.tooltip.skill',
@@ -64,9 +67,10 @@ const CATEGORY_TOOLTIP_I18N_KEY: Record<ActionTagCategory, string> = {
 
 const CATEGORY_STYLE_KEY: Record<
   ActionTagCategory,
-  'agentSkillTag' | 'commandTag' | 'projectSkillTag' | 'skillTag' | 'toolTag'
+  'agentSkillTag' | 'cliSkillTag' | 'commandTag' | 'projectSkillTag' | 'skillTag' | 'toolTag'
 > = {
   agentSkill: 'agentSkillTag',
+  cliSkill: 'cliSkillTag',
   command: 'commandTag',
   projectSkill: 'projectSkillTag',
   skill: 'skillTag',

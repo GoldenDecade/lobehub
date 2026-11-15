@@ -35,6 +35,14 @@ export const styles = stylex.create({
     backgroundColor: { 'default': null, ':hover': cssVar.colorFillTertiary },
     backgroundImage: { 'default': null, ':hover': 'none' },
   },
+  cliSkillTag: {
+    color: cssVar.colorSuccess,
+    borderRadius: { default: null, [SELECTED]: cssVar.borderRadius },
+    outlineStyle: { default: null, [SELECTED]: 'solid' },
+    outlineWidth: { default: null, [SELECTED]: '2px' },
+    outlineColor: { default: null, [SELECTED]: cssVar.colorSuccess },
+    outlineOffset: { default: null, [SELECTED]: '1px' },
+  },
   commandTag: {
     color: cssVar.purple,
     borderRadius: { default: null, [SELECTED]: cssVar.borderRadius },

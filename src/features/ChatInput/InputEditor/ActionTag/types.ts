@@ -5,13 +5,18 @@
  * 2. Skill        — Skill package, inserted via @ mention, preloaded before execution
  * 3. Tool         — Explicit tool selection, inserted via @ mention, context injected directly
  * 4. ProjectSkill — Filesystem skill discovered from the project or execution device,
- *                   inserted via slash menu, serialized as literal `/skill-name` so the
- *                   runtime resolves and runs the skill itself.
+ *                   inserted via slash menu. The runtime already lists it in
+ *                   `<available_skills>`, so it serializes as a `<skill>` tag.
  * 5. AgentSkill   — Agent-document skill bundle from `agentDocumentService`; the runtime
  *                   resolves the chip's identifier (`agent-document:<filename>`) against
  *                   the agent's document store at preload time.
+ * 6. CliSkill     — A skill the heterogeneous CLI itself expands from a message
+ *                   that starts with `/name` (agy's builtin, global and plugin
+ *                   skills). It is not in the runtime registry, so the chip
+ *                   serializes back to that literal prefix.
  */
-export type ActionTagCategory = 'command' | 'skill' | 'tool' | 'projectSkill' | 'agentSkill';
+export type ActionTagCategory =
+  'command' | 'skill' | 'tool' | 'projectSkill' | 'agentSkill' | 'cliSkill';
 
 // Built-in commands: client-side intercepted, never sent to AI.
 // `goal` is the exception — it has no client handler; it serializes back to the

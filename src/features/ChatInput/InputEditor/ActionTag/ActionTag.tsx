@@ -21,7 +21,9 @@ const ActionTag = memo<ActionTagProps>(({ node, editor, label }) => {
   const agentId = useAgentId();
   const resolveProjectSkill = useProjectSkillResolver(agentId);
   const skill =
-    node.actionCategory === 'projectSkill' ? resolveProjectSkill(node.actionType) : undefined;
+    node.actionCategory === 'projectSkill' || node.actionCategory === 'cliSkill'
+      ? resolveProjectSkill(node.actionType)
+      : undefined;
   const open = skill?.open;
 
   // The chip lives inside contentEditable, so route clicks through Lexical's

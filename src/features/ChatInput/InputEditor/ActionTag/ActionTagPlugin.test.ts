@@ -64,7 +64,7 @@ describe('resolveActionTagFromMatch', () => {
     });
   });
 
-  it('resolves tool and projectSkill tags', () => {
+  it('resolves tool, projectSkill and cliSkill tags', () => {
     expect(resolveActionTagFromMatch('tool', ' name="search" label="Search" ')).toMatchObject({
       actionCategory: 'tool',
       actionType: 'search',
@@ -72,6 +72,10 @@ describe('resolveActionTagFromMatch', () => {
     expect(
       resolveActionTagFromMatch('projectSkill', ' name="ux-audit" label="UX Audit" '),
     ).toMatchObject({ actionCategory: 'projectSkill', actionType: 'ux-audit' });
+    expect(resolveActionTagFromMatch('cliSkill', ' name="swarm" label="swarm" ')).toMatchObject({
+      actionCategory: 'cliSkill',
+      actionType: 'swarm',
+    });
   });
 
   it('resolves a legacy <action> tag with an explicit category', () => {
@@ -132,6 +136,26 @@ describe('writeActionTagMarkdown', () => {
         actionType: 'search',
       }),
     ).toBe('<tool name="search" label="Search" />');
+  });
+
+  it('serializes a CLI skill as the leading slash the CLI expands', () => {
+    expect(
+      writeActionTagMarkdown({
+        actionCategory: 'cliSkill',
+        actionLabel: 'swarm',
+        actionType: 'swarm',
+      }),
+    ).toBe('/swarm ');
+  });
+
+  it('refuses to turn a CLI skill with an unsafe name into a slash', () => {
+    expect(
+      writeActionTagMarkdown({
+        actionCategory: 'cliSkill',
+        actionLabel: 'bad',
+        actionType: 'swarm board',
+      }),
+    ).toBe('<action type="swarm board" category="cliSkill" label="bad" />');
   });
 });
 

@@ -49,6 +49,7 @@ export interface UseProjectSkillsResult {
 export const useProjectSkills = (
   workingDirectory: string | undefined,
   deviceId?: string,
+  agentType?: string,
 ): UseProjectSkillsResult => {
   const { t } = useTranslation('chat');
   const openLocalFile = useChatStore((s) => s.openLocalFile);
@@ -56,10 +57,13 @@ export const useProjectSkills = (
   const { error, revalidate } = useToolStore((s) => s.useFetchProjectSkills)(
     workingDirectory,
     deviceId,
+    agentType,
   );
   // The persisted scan paints on boot; the IPC / RPC scan replaces it once it
   // returns. `undefined` only until either one lands for this device + directory.
-  const data = useToolStore(projectSkillsSelectors.getProjectSkills(workingDirectory, deviceId));
+  const data = useToolStore(
+    projectSkillsSelectors.getProjectSkills(workingDirectory, deviceId, agentType),
+  );
   const isLoading = !!workingDirectory && !data && !error;
 
   // listProjectSkills approves per-skill preview roots. Fall back to the
@@ -76,6 +80,7 @@ export const useProjectSkills = (
         id: skill.skillDir,
         name: skill.name,
         scope: skill.scope,
+        source: skill.source,
       })),
     [data?.skills],
   );

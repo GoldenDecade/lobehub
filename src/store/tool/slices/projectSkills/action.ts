@@ -24,9 +24,12 @@ export class ProjectSkillsActionImpl {
       actionPrefix: n('projectSkills'),
       // A host without a scanner answers `undefined`; settle it as an empty scan
       // so the entry stops reading as loading.
-      fetcher: async ({ deviceId, workingDirectory }) =>
-        (await projectSkillService.listProjectSkills({ deviceId, scope: workingDirectory })) ??
-        EMPTY_PROJECT_SKILLS,
+      fetcher: async ({ agentType, deviceId, workingDirectory }) =>
+        (await projectSkillService.listProjectSkills({
+          agentType,
+          deviceId,
+          scope: workingDirectory,
+        })) ?? EMPTY_PROJECT_SKILLS,
       get,
       set,
       stateKey: 'projectSkillsReplica',
@@ -44,8 +47,9 @@ export class ProjectSkillsActionImpl {
   useFetchProjectSkills = (
     workingDirectory: string | undefined,
     deviceId?: string,
+    agentType?: string,
   ): ReplicaSyncResult =>
-    this.#skills.useSync(workingDirectory ? { deviceId, workingDirectory } : null, {
+    this.#skills.useSync(workingDirectory ? { agentType, deviceId, workingDirectory } : null, {
       // Remote skills live on a device this client can't watch for filesystem
       // changes, so refetch on focus to pick up edits made on the device. The
       // local IPC path stays off-focus — the desktop already sees its own

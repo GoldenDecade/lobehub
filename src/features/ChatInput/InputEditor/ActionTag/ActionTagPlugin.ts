@@ -47,13 +47,17 @@ const readTool = (el: XmlAttributeSource): SerializedActionTagNode => ({
   type: ActionTagNode.getType(),
   version: 1,
 });
-const readProjectSkill = (el: XmlAttributeSource): SerializedActionTagNode => ({
-  actionCategory: 'projectSkill',
-  actionLabel: el.getAttribute('label') || '',
-  actionType: (el.getAttribute('name') || '') as ActionTagType,
-  type: ActionTagNode.getType(),
-  version: 1,
-});
+const readNamedSkill =
+  (category: 'cliSkill' | 'projectSkill') =>
+  (el: XmlAttributeSource): SerializedActionTagNode => ({
+    actionCategory: category,
+    actionLabel: el.getAttribute('label') || '',
+    actionType: (el.getAttribute('name') || '') as ActionTagType,
+    type: ActionTagNode.getType(),
+    version: 1,
+  });
+const readProjectSkill = readNamedSkill('projectSkill');
+const readCliSkill = readNamedSkill('cliSkill');
 const readLegacyAction = (el: XmlAttributeSource): SerializedActionTagNode => ({
   actionCategory: (el.getAttribute('category') || 'skill') as ActionTagCategory,
   actionLabel: el.getAttribute('label') || '',
@@ -64,6 +68,7 @@ const readLegacyAction = (el: XmlAttributeSource): SerializedActionTagNode => ({
 
 const TAG_READERS: Record<string, (el: XmlAttributeSource) => SerializedActionTagNode> = {
   action: readLegacyAction,
+  cliskill: readCliSkill,
   projectskill: readProjectSkill,
   skill: readSkill,
   tool: readTool,
@@ -72,7 +77,7 @@ const TAG_READERS: Record<string, (el: XmlAttributeSource) => SerializedActionTa
 // A single self-closing action tag: <skill … />, <tool … />, <projectSkill … />
 // or the legacy <action … />. Non-global so `.exec` reports the first match's
 // index; the transform re-runs on the trailing text to pick up later tags.
-export const INLINE_ACTION_TAG_REGEX = /<(skill|projectskill|tool|action)(\s[^>]*?)?\/>/i;
+export const INLINE_ACTION_TAG_REGEX = /<(skill|projectskill|cliskill|tool|action)(\s[^>]*?)?\/>/i;
 const ATTRIBUTE_REGEX = /([\w-]+)\s*=\s*(?:"([^"]*)"|'([^']*)')/g;
 
 const parseAttributeSource = (attributeString: string): XmlAttributeSource => {
@@ -115,6 +120,11 @@ export const resolveActionTagFromMatch = (
  *                prompt uniform across skill sources, which the LiteXML
  *                round-trip preserves via the category-aware <projectSkill>
  *                save format.
+ * CliSkill     → `/name ` — a skill the heterogeneous CLI expands itself from a
+ *                message that starts with that prefix (agy's `/swarm`). The
+ *                trailing space keeps `/swarm board` from collapsing into
+ *                `/swarmboard` when text follows the chip directly. A `<skill>`
+ *                tag would reach the CLI verbatim, which does not expand it.
  * Tools        → <tool name="..." label="..." />
  * Goal         → `/goal ` — the one command the model is meant to read: both the
  *                client tool gate and the server system role detect a goal turn
@@ -132,6 +142,9 @@ export const writeActionTagMarkdown = (node: {
   const cat = node.actionCategory;
 
   if (cat === 'command' && node.actionType === GOAL_COMMAND_TYPE) return `/${GOAL_COMMAND_TYPE} `;
+  // Only a name the CLI can match is worth sending. Anything else would become
+  // a slash the CLI ignores, so it falls through to the skill tag.
+  if (cat === 'cliSkill' && /^[\w.-]+$/.test(node.actionType)) return `/${node.actionType} `;
   if (cat === 'skill' || cat === 'agentSkill' || cat === 'projectSkill')
     return `<skill name="${node.actionType}" label="${node.actionLabel}" />`;
   if (cat === 'tool') return `<tool name="${node.actionType}" label="${node.actionLabel}" />`;
@@ -259,8 +272,8 @@ export class ActionTagPlugin {
         if (cat === 'tool') {
           return ctx.createXmlNode('tool', { label: node.actionLabel, name: node.actionType });
         }
-        if (cat === 'projectSkill') {
-          return ctx.createXmlNode('projectSkill', {
+        if (cat === 'projectSkill' || cat === 'cliSkill') {
+          return ctx.createXmlNode(cat, {
             label: node.actionLabel,
             name: node.actionType,
           });
@@ -281,6 +294,7 @@ export class ActionTagPlugin {
     xmlService?.registerXMLReader('skill', readSkill);
     xmlService?.registerXMLReader('tool', readTool);
     xmlService?.registerXMLReader('projectSkill', readProjectSkill);
+    xmlService?.registerXMLReader('cliSkill', readCliSkill);
     xmlService?.registerXMLReader('action', readLegacyAction);
   }
 

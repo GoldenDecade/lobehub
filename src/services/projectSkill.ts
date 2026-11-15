@@ -12,15 +12,19 @@ import { localFileService } from '@/services/electron/localFileService';
 class ProjectSkillService {
   /** List project and execution-device `.agents/skills` / `.claude/skills`. */
   async listProjectSkills({
+    agentType,
     deviceId,
     scope,
   }: {
+    /** Heterogeneous CLI whose native `/name` skills should be merged in. */
+    agentType?: string;
     deviceId?: string;
     scope: string;
   }): Promise<ListProjectSkillsResult | undefined> {
     return deviceId
-      ? ((await lambdaClient.device.listProjectSkills.query({ deviceId, scope })) ?? undefined)
-      : localFileService.listProjectSkills({ scope });
+      ? ((await lambdaClient.device.listProjectSkills.query({ agentType, deviceId, scope })) ??
+          undefined)
+      : localFileService.listProjectSkills({ agentType, scope });
   }
 }
 

@@ -82,6 +82,10 @@ describe('useSlashActionItems · project skills', () => {
 
     renderHook(() => useSlashActionItems());
 
-    expect(state.useFetchProjectSkills).toHaveBeenLastCalledWith('/repo/pane', 'pane-device');
+    expect(state.useFetchProjectSkills).toHaveBeenLastCalledWith(
+      '/repo/pane',
+      'pane-device',
+      undefined,
+    );
   });
 });

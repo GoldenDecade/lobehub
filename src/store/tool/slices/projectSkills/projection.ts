@@ -4,6 +4,12 @@ import { defineReplica } from '@/libs/replica';
 
 /** One filesystem skill scan target: a bound device (or the local desktop) + directory. */
 export interface ProjectSkillsParams {
+  /**
+   * Heterogeneous CLI whose native skills join the scan. Part of the key: an
+   * Antigravity agent and a Claude Code agent on the same directory see
+   * different skills, and one must not paint the other's cached scan.
+   */
+  agentType?: string;
   /** Bound device scanned over RPC; `undefined` is the local desktop over IPC. */
   deviceId?: string;
   workingDirectory: string;
@@ -19,8 +25,12 @@ export const MAX_PERSISTED_PROJECT_SKILL_SCANS = 20;
 /** A settled scan that found nothing (or a host without a skills scanner). */
 export const EMPTY_PROJECT_SKILLS: ListProjectSkillsResult = { root: '', skills: [], source: null };
 
-export const projectSkillsKey = ({ deviceId, workingDirectory }: ProjectSkillsParams): string =>
-  JSON.stringify([deviceId ?? 'local', workingDirectory]);
+export const projectSkillsKey = ({
+  agentType,
+  deviceId,
+  workingDirectory,
+}: ProjectSkillsParams): string =>
+  JSON.stringify([deviceId ?? 'local', workingDirectory, agentType ?? '']);
 
 /**
  * The `.agents/skills` / `.claude/skills` scan of one device + directory, keyed
