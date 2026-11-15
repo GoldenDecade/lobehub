@@ -67,6 +67,27 @@ describe('HeterogeneousPromptEngine', () => {
     ]);
   });
 
+  it('keeps a leading slash invocation ahead of the session guide', () => {
+    const blocks = buildHeterogeneousPrompt({
+      isNewSession: true,
+      prompt: '/swarm split the work and report back',
+      systemContext: 'Workspace context',
+    });
+
+    expect(blocks.map((block) => block.type === 'text' && block.text)).toEqual([
+      '/swarm',
+      'Workspace context',
+      lobeHubCliGuide,
+      'split the work and report back',
+    ]);
+  });
+
+  it('leaves a slash that is not the first token where it is', () => {
+    expect(
+      buildHeterogeneousPrompt({ isNewSession: true, prompt: 'please /swarm this' }).at(-1),
+    ).toEqual({ text: 'please /swarm this', type: 'text' });
+  });
+
   it('recognizes markdown-escaped topic tags', () => {
     const blocks = buildHeterogeneousPrompt({
       prompt: '\\<refer\\_topic name="Previous" id="topic-ref" />',

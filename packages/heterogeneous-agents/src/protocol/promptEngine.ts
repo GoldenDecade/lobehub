@@ -67,6 +67,51 @@ const lobeHubCliProvider: HeterogeneousPromptContextProvider = {
 const defaultContextProviders = [lobeHubCliProvider, topicReferenceGuidanceProvider];
 
 /**
+ * A CLI slash invocation only expands when it is the first thing in the
+ * message. agy (Antigravity) has no plugin-dir to deliver the `lh` guide
+ * through, so that guide is prepended as text — which would push `/swarm` off
+ * the start and leave it unexpanded. Hoist one leading invocation back in
+ * front; the guide follows it.
+ *
+ * Only a single leading token of the user's own text is hoisted. A slash later
+ * in the message, or a message that is only the guide, is left untouched.
+ */
+const LEADING_SLASH_INVOCATION = /^(\/[A-Za-z0-9_.-]+)(?=$|\s)/;
+
+export function hoistLeadingSlashInvocation(blocks: AgentContentBlock[]): AgentContentBlock[] {
+  const firstText = blocks.findIndex((block) => block.type === 'text' && block.text.length > 0);
+  if (firstText === -1) return blocks;
+
+  // The user's text is the last block; the earlier ones are context prepended
+  // by the engine. Walking backwards is what makes that distinction hold when
+  // more than one context block precedes it.
+  let userText = -1;
+  for (let index = blocks.length - 1; index > firstText; index -= 1) {
+    const block = blocks[index];
+    if (block.type === 'text' && block.text.length > 0) {
+      userText = index;
+      break;
+    }
+  }
+  if (userText === -1) return blocks;
+
+  const userBlock = blocks[userText];
+  if (userBlock.type !== 'text') return blocks;
+
+  const match = LEADING_SLASH_INVOCATION.exec(userBlock.text);
+  if (!match) return blocks;
+
+  const invocation = match[1];
+  const remainder = userBlock.text.slice(invocation.length).replace(/^\s+/, '');
+  const hoisted = blocks.map((block, index) =>
+    index === userText ? { ...block, text: remainder } : block,
+  );
+  if (!remainder) hoisted.splice(userText, 1);
+
+  return [{ text: invocation, type: 'text' }, ...hoisted];
+}
+
+/**
  * Builds the semantic prompt shared by every heterogeneous-agent transport.
  * Providers add LobeHub context before the user message; CLI-specific wire
  * serialization remains the responsibility of `buildAgentInput`.
@@ -90,14 +135,14 @@ export class HeterogeneousPromptEngine {
     }
 
     if (prompt) blocks.push({ text: prompt, type: 'text' });
-    blocks.push(
+
+    return [
+      ...hoistLeadingSlashInvocation(blocks),
       ...imageList.map(({ id, url }): AgentImageBlock => ({
         source: { id, type: 'url', url },
         type: 'image',
       })),
-    );
-
-    return blocks;
+    ];
   }
 }
 
