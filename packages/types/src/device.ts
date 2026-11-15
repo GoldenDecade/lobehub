@@ -19,7 +19,13 @@ export interface DeviceUnavailableErrorData {
 }
 
 export type ProjectSkillScope = 'device' | 'project';
-export type ProjectSkillSource = '.agents/skills' | '.claude/skills' | '.codex/skills';
+export type ProjectSkillSource =
+  | '.agents/skills'
+  | '.claude/skills'
+  | '.codex/skills'
+  | 'antigravity-builtin'
+  | 'antigravity-global'
+  | 'antigravity-plugin';
 
 /**
  * A filesystem skill discovered on the execution device by the client at

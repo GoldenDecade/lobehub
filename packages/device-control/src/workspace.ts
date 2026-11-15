@@ -6,6 +6,7 @@ import path from 'node:path';
 import { detectGitHubRepository, detectRepoType } from '@lobechat/local-file-shell/git';
 import matter from 'gray-matter';
 
+import { listAntigravitySkills } from './antigravitySkills';
 import type {
   BrowseDirectoryParams,
   BrowseDirectoryResult,
@@ -224,7 +225,20 @@ const scanSkillsInSource = async ({
   return skills.filter((skill): skill is ProjectSkillItem => skill !== null);
 };
 
-const collectSkills = async (roots: SkillScanRoot[]): Promise<ProjectSkillItem[]> => {
+/**
+ * Skills a heterogeneous CLI resolves from a leading `/name` that do not live
+ * in the shared skill directories. Only CLIs whose headless mode expands that
+ * prefix are listed; others keep the filesystem scan alone.
+ */
+const listCliSkills = async (agentType: string | undefined): Promise<ProjectSkillItem[]> => {
+  if (agentType !== 'antigravity') return [];
+  return listAntigravitySkills();
+};
+
+const collectSkills = async (
+  roots: SkillScanRoot[],
+  cliSkills: ProjectSkillItem[] = [],
+): Promise<ProjectSkillItem[]> => {
   const seen = new Set<string>();
   const skills: ProjectSkillItem[] = [];
 
@@ -234,6 +248,14 @@ const collectSkills = async (roots: SkillScanRoot[]): Promise<ProjectSkillItem[]
       seen.add(skill.name);
       skills.push(skill);
     }
+  }
+
+  // CLI skills come last, so a project or device skill of the same name wins:
+  // that is the copy the CLI expands when both exist.
+  for (const skill of cliSkills) {
+    if (seen.has(skill.name)) continue;
+    seen.add(skill.name);
+    skills.push(skill);
   }
 
   return skills.sort((a, b) => a.name.localeCompare(b.name));
@@ -327,7 +349,10 @@ export const listProjectSkills = async (
   deps: WorkspaceScanDeps = {},
 ): Promise<ListProjectSkillsResult> => {
   const root = params.scope;
-  const skills = await collectSkills(await createSkillRoots(root));
+  const skills = await collectSkills(
+    await createSkillRoots(root),
+    await listCliSkills(params.agentType),
+  );
 
   if (skills.length > 0) {
     await approvePreviewRoots(skills, deps);

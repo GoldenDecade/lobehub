@@ -318,6 +318,11 @@ export async function readExternalAssetForPublish(
 export async function listProjectSkills(
   getClient: DeviceClientGetter,
   params: {
+    /**
+     * Heterogeneous CLI whose native skills the device should merge in.
+     * `antigravity` adds agy's builtin, global and enabled-plugin skills.
+     */
+    agentType?: string;
     deviceId: string;
     scope: string;
     timeout?: number;
@@ -325,14 +330,14 @@ export async function listProjectSkills(
     workspaceId?: string;
   },
 ): Promise<DeviceListProjectSkillsResult | undefined> {
-  const { userId, deviceId, scope, timeout = 30_000, workspaceId } = params;
+  const { userId, agentType, deviceId, scope, timeout = 30_000, workspaceId } = params;
   const client = getClient();
   if (!client) return undefined;
 
   try {
     const result = await client.invokeRpc<DeviceListProjectSkillsResult>(
       { deviceId, timeout, userId, workspaceId },
-      { method: 'listProjectSkills', params: { scope } },
+      { method: 'listProjectSkills', params: { agentType, scope } },
     );
 
     if (!result.success || !result.data) {

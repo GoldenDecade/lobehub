@@ -11,7 +11,13 @@ import type { DeviceClient, DeviceCliRestartParams, DeviceCliUpdateState } from 
 // ─── Workspace scan ───
 
 export type ProjectSkillScope = 'device' | 'project';
-export type ProjectSkillSource = '.agents/skills' | '.claude/skills' | '.codex/skills';
+export type ProjectSkillSource =
+  | '.agents/skills'
+  | '.claude/skills'
+  | '.codex/skills'
+  | 'antigravity-builtin'
+  | 'antigravity-global'
+  | 'antigravity-plugin';
 
 export interface ProjectSkillItem {
   description?: string;
@@ -51,6 +57,12 @@ export interface InitWorkspaceResult {
 }
 
 export interface ListProjectSkillsParams {
+  /**
+   * Heterogeneous CLI whose native skills should be merged into the scan.
+   * `antigravity` adds agy's builtin, global and enabled-plugin skills so the
+   * slash menu can invoke them as `/name`. Other types keep the filesystem scan.
+   */
+  agentType?: string;
   /** Working directory used to resolve the project root. */
   scope: string;
 }

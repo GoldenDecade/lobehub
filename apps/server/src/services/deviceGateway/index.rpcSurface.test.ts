@@ -391,7 +391,7 @@ const cases: RpcCase[] = [
     call: (g) => g.listProjectSkills({ ...base, scope: '/p' }),
     failure: UNDEFINED,
     name: 'listProjectSkills',
-    payload: { method: 'listProjectSkills', params: { scope: '/p' } },
+    payload: { method: 'listProjectSkills', params: { agentType: undefined, scope: '/p' } },
   },
   {
     address: address(30_000),

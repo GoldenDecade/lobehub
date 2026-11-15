@@ -267,9 +267,16 @@ export const projectFilesRouter = router({
    * Resources tab's skills group in device mode. Returns `null` when offline.
    */
   listProjectSkills: deviceProcedure
-    .input(z.object({ deviceId: z.string(), scope: z.string() }))
+    .input(
+      z.object({
+        agentType: z.string().optional(),
+        deviceId: z.string(),
+        scope: z.string(),
+      }),
+    )
     .query(async ({ ctx, input }) => {
       const result = await deviceGateway.listProjectSkills({
+        agentType: input.agentType,
         deviceId: input.deviceId,
         scope: input.scope,
         userId: ctx.userId,

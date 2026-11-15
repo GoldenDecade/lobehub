@@ -165,6 +165,52 @@ describe('initWorkspace', () => {
 });
 
 describe('listProjectSkills', () => {
+  it('merges an Antigravity CLI skill without displacing a project skill of the same name', async () => {
+    const repo = path.join(base, 'repo');
+    await mkdir(repo, { recursive: true });
+    await writeSkill(path.join(repo, '.agents', 'skills'), 'swarm', 'project swarm');
+    await write(
+      path.join(
+        home,
+        '.gemini',
+        'antigravity-cli',
+        'builtin',
+        'skills',
+        'native_swarm',
+        'SKILL.md',
+      ),
+      '---\nname: swarm\ndescription: agy swarm\n---\n\n# swarm\n',
+    );
+    await write(
+      path.join(home, '.gemini', 'antigravity-cli', 'builtin', 'skills', 'hidden', 'SKILL.md'),
+      '---\nname: hidden\ndescription: internal\ndisable-slash-command: true\n---\n\n# hidden\n',
+    );
+    await write(
+      path.join(home, '.gemini', 'config', 'skills', 'ego-browser', 'SKILL.md'),
+      '---\nname: ego-browser\ndescription: browser\n---\n\n# ego\n',
+    );
+
+    const result = await listProjectSkills({ agentType: 'antigravity', scope: repo });
+
+    expect(result.skills.map(({ name, source }) => ({ name, source }))).toEqual([
+      { name: 'ego-browser', source: 'antigravity-global' },
+      { name: 'swarm', source: '.agents/skills' },
+    ]);
+  });
+
+  it('does not scan Antigravity skills for another CLI', async () => {
+    const repo = path.join(base, 'repo');
+    await mkdir(repo, { recursive: true });
+    await write(
+      path.join(home, '.gemini', 'config', 'skills', 'ego-browser', 'SKILL.md'),
+      '---\nname: ego-browser\ndescription: browser\n---\n\n# ego\n',
+    );
+
+    const result = await listProjectSkills({ agentType: 'claude-code', scope: repo });
+
+    expect(result.skills).toEqual([]);
+  });
+
   it('approves the source directory of a parent-level skill for preview', async () => {
     const repo = path.join(base, 'repo');
     const pkg = path.join(repo, 'pkg');

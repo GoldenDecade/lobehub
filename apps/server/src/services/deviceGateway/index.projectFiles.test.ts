@@ -201,7 +201,7 @@ describe('DeviceGateway', () => {
       expect(result).toEqual(data);
       expect(mockClient.invokeRpc).toHaveBeenCalledWith(
         { deviceId: 'dev-1', timeout: 30_000, userId: 'user-1' },
-        { method: 'listProjectSkills', params: { scope: '/proj' } },
+        { method: 'listProjectSkills', params: { agentType: undefined, scope: '/proj' } },
       );
     });
 
@@ -252,7 +252,7 @@ describe('DeviceGateway', () => {
 
       expect(mockClient.invokeRpc).toHaveBeenCalledWith(
         { deviceId: 'dev-1', timeout: 60_000, userId: 'user-1' },
-        { method: 'listProjectSkills', params: { scope: '/proj' } },
+        { method: 'listProjectSkills', params: { agentType: undefined, scope: '/proj' } },
       );
     });
   });
