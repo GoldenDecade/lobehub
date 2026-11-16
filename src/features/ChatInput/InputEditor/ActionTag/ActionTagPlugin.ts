@@ -144,7 +144,8 @@ export const writeActionTagMarkdown = (node: {
   if (cat === 'command' && node.actionType === GOAL_COMMAND_TYPE) return `/${GOAL_COMMAND_TYPE} `;
   // Only a name the CLI can match is worth sending. Anything else would become
   // a slash the CLI ignores, so it falls through to the skill tag.
-  if (cat === 'cliSkill' && /^[\w.-]+$/.test(node.actionType)) return `/${node.actionType} `;
+  if (cat === 'cliSkill' && /^[\w.-]+(?::[\w.-]+)?$/.test(node.actionType))
+    return `/${node.actionType} `;
   if (cat === 'skill' || cat === 'agentSkill' || cat === 'projectSkill')
     return `<skill name="${node.actionType}" label="${node.actionLabel}" />`;
   if (cat === 'tool') return `<tool name="${node.actionType}" label="${node.actionLabel}" />`;

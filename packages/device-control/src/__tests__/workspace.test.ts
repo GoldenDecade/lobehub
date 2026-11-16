@@ -5,15 +5,22 @@ import path from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { resetClaudeCodeBuiltinSkillsCache } from '../claudeCodeSkills';
 import { initWorkspace, listProjectSkills } from '../workspace';
 
 let base: string;
 let home: string;
 
+const detectHeterogeneousCliCommand = vi.hoisted(() => vi.fn());
+
 vi.mock('node:os', async (importOriginal) => {
   const actual = await importOriginal<typeof NodeOs>();
   return { ...actual, homedir: () => home };
 });
+
+vi.mock('@lobechat/heterogeneous-agents/resolveCliCommand', () => ({
+  detectHeterogeneousCliCommand,
+}));
 
 const write = async (file: string, content: string) => {
   await mkdir(path.dirname(file), { recursive: true });
@@ -30,9 +37,12 @@ beforeEach(async () => {
   base = await mkdtemp(path.join(tmpdir(), 'workspace-scan-'));
   home = path.join(base, 'home');
   await mkdir(home, { recursive: true });
+  resetClaudeCodeBuiltinSkillsCache();
+  detectHeterogeneousCliCommand.mockReset().mockResolvedValue({ available: false });
 });
 
 afterEach(async () => {
+  resetClaudeCodeBuiltinSkillsCache();
   await rm(base, { force: true, recursive: true });
 });
 
@@ -206,9 +216,57 @@ describe('listProjectSkills', () => {
       '---\nname: ego-browser\ndescription: browser\n---\n\n# ego\n',
     );
 
-    const result = await listProjectSkills({ agentType: 'claude-code', scope: repo });
+    const claudeResult = await listProjectSkills({ agentType: 'claude-code', scope: repo });
+    expect(claudeResult.skills.map((s) => s.name)).not.toContain('ego-browser');
 
-    expect(result.skills).toEqual([]);
+    const codexResult = await listProjectSkills({ agentType: 'codex', scope: repo });
+    expect(codexResult.skills).toEqual([]);
+  });
+
+  it('merges enabled Claude Code plugin skills, approves preview roots, and lets project skills win on collision', async () => {
+    const repo = path.join(base, 'repo');
+    await mkdir(repo, { recursive: true });
+
+    const pluginDir = path.join(home, '.claude', 'plugins', 'cache', 'mkt', 'my-plugin', '1.0.0');
+    await writeSkill(path.join(repo, '.claude', 'skills'), 'my-plugin:review', 'project override');
+    await write(
+      path.join(pluginDir, '.claude-plugin', 'plugin.json'),
+      JSON.stringify({ name: 'my-plugin', version: '1.0.0' }),
+    );
+    await write(
+      path.join(pluginDir, 'skills', 'review', 'SKILL.md'),
+      '---\nname: review\ndescription: plugin review\n---\n\n# review\n',
+    );
+    await write(
+      path.join(pluginDir, 'skills', 'audit', 'SKILL.md'),
+      '---\nname: audit\ndescription: plugin audit\n---\n\n# audit\n',
+    );
+    await write(
+      path.join(home, '.claude', 'plugins', 'installed_plugins.json'),
+      JSON.stringify({
+        plugins: {
+          'my-plugin@mkt': [{ installPath: pluginDir, scope: 'user', version: '1.0.0' }],
+        },
+        version: 2,
+      }),
+    );
+
+    const approveProjectRoot = vi.fn(async () => {});
+    const claudeResult = await listProjectSkills(
+      { agentType: 'claude-code', scope: repo },
+      { approveProjectRoot },
+    );
+
+    expect(
+      claudeResult.skills.map(({ description, name, source }) => ({ description, name, source })),
+    ).toEqual([
+      { description: 'plugin audit', name: 'my-plugin:audit', source: 'claude-code-plugin' },
+      { description: 'project override', name: 'my-plugin:review', source: '.claude/skills' },
+    ]);
+    expect(approveProjectRoot).toHaveBeenCalledWith(path.join(pluginDir, 'skills', 'audit'));
+
+    const codexResult = await listProjectSkills({ agentType: 'codex', scope: repo });
+    expect(codexResult.skills.map((item) => item.name)).toEqual(['my-plugin:review']);
   });
 
   it('approves the source directory of a parent-level skill for preview', async () => {

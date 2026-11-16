@@ -25,7 +25,9 @@ export type ProjectSkillSource =
   | '.codex/skills'
   | 'antigravity-builtin'
   | 'antigravity-global'
-  | 'antigravity-plugin';
+  | 'antigravity-plugin'
+  | 'claude-code-builtin'
+  | 'claude-code-plugin';
 
 /**
  * A filesystem skill discovered on the execution device by the client at

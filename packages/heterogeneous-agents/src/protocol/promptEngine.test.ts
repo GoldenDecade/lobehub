@@ -82,6 +82,21 @@ describe('HeterogeneousPromptEngine', () => {
     ]);
   });
 
+  it('hoists colon-namespaced plugin slash invocations ahead of session context', () => {
+    const blocks = buildHeterogeneousPrompt({
+      isNewSession: true,
+      prompt: '/frontend-design:frontend-design build landing page',
+      systemContext: 'Workspace context',
+    });
+
+    expect(blocks.map((block) => block.type === 'text' && block.text)).toEqual([
+      '/frontend-design:frontend-design',
+      'Workspace context',
+      lobeHubCliGuide,
+      'build landing page',
+    ]);
+  });
+
   it('leaves a slash that is not the first token where it is', () => {
     expect(
       buildHeterogeneousPrompt({ isNewSession: true, prompt: 'please /swarm this' }).at(-1),

@@ -320,7 +320,8 @@ export async function listProjectSkills(
   params: {
     /**
      * Heterogeneous CLI whose native skills the device should merge in.
-     * `antigravity` adds agy's builtin, global and enabled-plugin skills.
+     * `antigravity` adds agy's builtin, global and enabled-plugin skills;
+     * `claude-code` adds builtin bundled skills and enabled plugin skills.
      */
     agentType?: string;
     deviceId: string;

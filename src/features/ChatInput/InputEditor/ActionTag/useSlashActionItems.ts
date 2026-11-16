@@ -9,6 +9,10 @@ import { ArchiveIcon, MessageSquarePlusIcon, TargetIcon } from 'lucide-react';
 import { useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 
+import {
+  isCliSlashSkillSource,
+  resolveCliSkillAgentType,
+} from '@/features/SkillsList/cliSkillSource';
 import { resolveExecutionTarget } from '@/helpers/executionTarget';
 import { useIsGatewayModeEnabled } from '@/helpers/gatewayMode';
 import { useEffectiveAgencyConfig } from '@/hooks/useEffectiveAgencyConfig';
@@ -29,19 +33,6 @@ import { type ActionTagData, BUILTIN_COMMANDS, GOAL_COMMAND_TYPE } from './types
 import { useInstalledSkillsAndTools } from './useInstalledSkillsAndTools';
 
 type SlashItem = NonNullable<SlashOptions['items'] extends (infer U)[] ? U : never>;
-
-/**
- * Skills agy (and only agy) expands from a message that starts with `/name`.
- * They live outside the shared skill directories, so the runtime never sees
- * them in `<available_skills>` and a `<skill>` tag would be sent verbatim.
- */
-const CLI_SLASH_SKILL_SOURCES = new Set([
-  'antigravity-builtin',
-  'antigravity-global',
-  'antigravity-plugin',
-]);
-
-const isCliSlashSkill = (skill: ProjectSkillItem) => CLI_SLASH_SKILL_SOURCES.has(skill.source);
 
 interface SlashMenuOption {
   icon?: any;
@@ -100,10 +91,9 @@ export const useSlashActionItems = (): SlashOptions['items'] => {
   // Local desktop reads over IPC; a bound device reads over RPC. Either path
   // makes filesystem skills reachable even when this client isn't the desktop app
   // (previously gated on `isDesktop` alone, so remote/web runs got nothing).
-  // Only an Antigravity agent can expand agy's own `/name` skills, so only
-  // its scan asks for them. Other agents keep the shared filesystem scan.
-  const cliAgentType =
-    agencyConfig?.heterogeneousProvider?.type === 'antigravity' ? 'antigravity' : undefined;
+  // Antigravity and non-API Claude Code agents can expand their own CLI-native
+  // `/name` skills, so their scan merges those in; others keep the shared scan.
+  const cliAgentType = resolveCliSkillAgentType(agencyConfig?.heterogeneousProvider);
   const projectSkillsEnabled = (isDesktop || !!remoteDeviceId) && !!workingDirectory;
   const projectSkillsDirectory = projectSkillsEnabled ? workingDirectory : undefined;
   useToolStore((s) => s.useFetchProjectSkills)(
@@ -163,10 +153,10 @@ export const useSlashActionItems = (): SlashOptions['items'] => {
       });
 
       const makeProjectSkillItem = (skill: ProjectSkillItem): SlashMenuOption => {
-        // agy's own skills are not in the runtime's `<available_skills>` registry,
-        // so the chip must serialize as the literal `/name` agy expands. A
-        // filesystem skill stays a skill chip the runtime activates itself.
-        const category = isCliSlashSkill(skill) ? 'cliSkill' : 'projectSkill';
+        // CLI-native skills live outside the runtime's `<available_skills>`
+        // registry, so the chip serializes as a literal `/name` the CLI expands.
+        // Shared filesystem skills stay a skill chip the runtime activates itself.
+        const category = isCliSlashSkillSource(skill.source) ? 'cliSkill' : 'projectSkill';
         return {
           // Slash is already implied by the trigger + tag color, so we render the
           // bare skill name here.

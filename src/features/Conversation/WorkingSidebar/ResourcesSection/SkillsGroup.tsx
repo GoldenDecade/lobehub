@@ -6,6 +6,7 @@ import { useTranslation } from 'react-i18next';
 import { startSkillDrag } from '@/features/ChatInput/InputEditor/ActionTag/skillDragData';
 import {
   filterSkillItems,
+  isCliSlashSkillSource,
   type SkillListItem,
   SkillSection,
   SkillsList,
@@ -13,23 +14,25 @@ import {
   useProjectSkills,
 } from '@/features/SkillsList';
 
-// Filesystem skills are resolved by the underlying runtime registry, so
-// we serialize them as a literal `/skill-name` (projectSkill chip).
+// CLI-native plugin skills serialize as `/name` (cliSkill chip); shared
+// filesystem skills stay projectSkill chips resolved by the runtime registry.
 const handleSkillDragStart = (item: SkillListItem, event: React.DragEvent) => {
   startSkillDrag(event, {
-    category: 'projectSkill',
+    category: isCliSlashSkillSource(item.source) ? 'cliSkill' : 'projectSkill',
     label: item.name,
     type: item.name,
   });
 };
 
 interface SkillsGroupProps {
+  /** Heterogeneous CLI whose native skills join the scan. */
+  agentType?: string;
   /** Bound remote device id; when set, skills are scanned over RPC. */
   deviceId?: string;
   workingDirectory: string;
 }
 
-const SkillsGroup = memo<SkillsGroupProps>(({ deviceId, workingDirectory }) => {
+const SkillsGroup = memo<SkillsGroupProps>(({ agentType, deviceId, workingDirectory }) => {
   const { t } = useTranslation('chat');
   const [searchQuery, setSearchQuery] = useState('');
   // Local desktop reads over IPC; a bound device reads over RPC. Either path
@@ -44,7 +47,7 @@ const SkillsGroup = memo<SkillsGroupProps>(({ deviceId, workingDirectory }) => {
     onOpenFile,
     onOpenSkill,
     projectItems,
-  } = useProjectSkills(enabled ? workingDirectory : undefined, deviceId);
+  } = useProjectSkills(enabled ? workingDirectory : undefined, deviceId, agentType);
 
   if (!enabled) return null;
 

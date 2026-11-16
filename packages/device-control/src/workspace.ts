@@ -7,6 +7,7 @@ import { detectGitHubRepository, detectRepoType } from '@lobechat/local-file-she
 import matter from 'gray-matter';
 
 import { listAntigravitySkills } from './antigravitySkills';
+import { listClaudeCodeSkills } from './claudeCodeSkills';
 import type {
   BrowseDirectoryParams,
   BrowseDirectoryResult,
@@ -125,7 +126,7 @@ const createSkillRoots = async (root: string): Promise<SkillScanRoot[]> => [
 
 const toPosixRelativePath = (filePath: string) => filePath.split(path.sep).join('/');
 
-const listSkillFilesRecursive = async (dir: string): Promise<string[]> => {
+export const listSkillFilesRecursive = async (dir: string): Promise<string[]> => {
   const results: string[] = [];
   const stack: string[] = [dir];
 
@@ -230,9 +231,13 @@ const scanSkillsInSource = async ({
  * in the shared skill directories. Only CLIs whose headless mode expands that
  * prefix are listed; others keep the filesystem scan alone.
  */
-const listCliSkills = async (agentType: string | undefined): Promise<ProjectSkillItem[]> => {
-  if (agentType !== 'antigravity') return [];
-  return listAntigravitySkills();
+const listCliSkills = async (
+  agentType: string | undefined,
+  scope: string,
+): Promise<ProjectSkillItem[]> => {
+  if (agentType === 'antigravity') return listAntigravitySkills();
+  if (agentType === 'claude-code') return listClaudeCodeSkills({ cwd: scope });
+  return [];
 };
 
 const collectSkills = async (
@@ -268,7 +273,9 @@ const approvePreviewRoots = async (
 ): Promise<void> => {
   if (!deps.approveProjectRoot) return;
 
-  const roots = new Set([...extraRoots, ...skills.map((skill) => skill.previewRoot)]);
+  const roots = new Set(
+    [...extraRoots, ...skills.map((skill) => skill.previewRoot)].filter(Boolean),
+  );
   await Promise.all([...roots].map((root) => deps.approveProjectRoot!(root)));
 };
 
@@ -351,7 +358,7 @@ export const listProjectSkills = async (
   const root = params.scope;
   const skills = await collectSkills(
     await createSkillRoots(root),
-    await listCliSkills(params.agentType),
+    await listCliSkills(params.agentType, root),
   );
 
   if (skills.length > 0) {

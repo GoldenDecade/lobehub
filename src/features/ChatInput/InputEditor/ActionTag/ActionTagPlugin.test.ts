@@ -146,16 +146,25 @@ describe('writeActionTagMarkdown', () => {
         actionType: 'swarm',
       }),
     ).toBe('/swarm ');
-  });
-
-  it('refuses to turn a CLI skill with an unsafe name into a slash', () => {
     expect(
       writeActionTagMarkdown({
         actionCategory: 'cliSkill',
-        actionLabel: 'bad',
-        actionType: 'swarm board',
+        actionLabel: 'frontend-design:frontend-design',
+        actionType: 'frontend-design:frontend-design',
       }),
-    ).toBe('<action type="swarm board" category="cliSkill" label="bad" />');
+    ).toBe('/frontend-design:frontend-design ');
+  });
+
+  it('refuses to turn a CLI skill with an unsafe name into a slash', () => {
+    for (const unsafeName of ['swarm board', ':bad', 'bad:', 'a:b:c']) {
+      expect(
+        writeActionTagMarkdown({
+          actionCategory: 'cliSkill',
+          actionLabel: 'bad',
+          actionType: unsafeName,
+        }),
+      ).toBe(`<action type="${unsafeName}" category="cliSkill" label="bad" />`);
+    }
   });
 });
 

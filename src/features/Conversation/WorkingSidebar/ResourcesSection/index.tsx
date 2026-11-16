@@ -1,6 +1,7 @@
 import { Flexbox } from '@lobehub/ui';
 import { memo } from 'react';
 
+import { useEffectiveAgencyConfig } from '@/hooks/useEffectiveAgencyConfig';
 import { useEffectiveWorkingDirectory } from '@/hooks/useEffectiveWorkingDirectory';
 import { useAgentStore } from '@/store/agent';
 import { agentSelectors } from '@/store/agent/selectors';
@@ -24,6 +25,9 @@ interface ResourcesSectionProps {
 const ResourcesSection = memo<ResourcesSectionProps>(({ deviceId, enabled = true, filter }) => {
   const isHetero = useAgentStore(agentSelectors.isCurrentAgentHeterogeneous);
   const activeAgentId = useAgentStore((s) => s.activeAgentId);
+  const { agencyConfig } = useEffectiveAgencyConfig(activeAgentId);
+  const cliAgentType =
+    agencyConfig?.heterogeneousProvider?.type === 'claude-code' ? 'claude-code' : undefined;
   // Resolve the cwd the same way the runtime bar / WorkingSidebar do
   // (`useEffectiveWorkingDirectory`). The old `topicCwd || agentCwd` pattern
   // missed `workingDirByDevice[deviceId]` / `device.defaultCwd`, so a
@@ -43,7 +47,11 @@ const ResourcesSection = memo<ResourcesSectionProps>(({ deviceId, enabled = true
       style={{ minHeight: 0 }}
     >
       {isHetero && workingDirectory && filter === 'skills' && (
-        <SkillsGroup deviceId={deviceId} workingDirectory={workingDirectory} />
+        <SkillsGroup
+          agentType={cliAgentType}
+          deviceId={deviceId}
+          workingDirectory={workingDirectory}
+        />
       )}
       {!isHetero && (
         <AgentDocumentsGroup

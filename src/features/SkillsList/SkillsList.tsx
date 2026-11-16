@@ -32,8 +32,9 @@ export interface SkillListItem {
   /** Filesystem skill scope when the row comes from a device scan. */
   scope?: 'device' | 'project';
   /**
-   * Where the skill was found. CLI-native sources (`antigravity-*`) serialize
-   * as a leading `/name` the CLI expands; everything else stays a skill chip.
+   * Where the skill was found. CLI-native sources (`antigravity-*`,
+   * `claude-code-*`) serialize as a leading `/name` the CLI expands;
+   * everything else stays a skill chip.
    */
   source?: string;
 }

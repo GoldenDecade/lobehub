@@ -17,7 +17,9 @@ export type ProjectSkillSource =
   | '.codex/skills'
   | 'antigravity-builtin'
   | 'antigravity-global'
-  | 'antigravity-plugin';
+  | 'antigravity-plugin'
+  | 'claude-code-builtin'
+  | 'claude-code-plugin';
 
 export interface ProjectSkillItem {
   description?: string;
@@ -60,7 +62,9 @@ export interface ListProjectSkillsParams {
   /**
    * Heterogeneous CLI whose native skills should be merged into the scan.
    * `antigravity` adds agy's builtin, global and enabled-plugin skills so the
-   * slash menu can invoke them as `/name`. Other types keep the filesystem scan.
+   * slash menu can invoke them as `/name`; `claude-code` adds Claude Code's
+   * builtin bundled skills (`/loop`, `/claude-api`, …) and enabled plugin
+   * skills (`/plugin:skill`). Other types keep the filesystem scan.
    */
   agentType?: string;
   /** Working directory used to resolve the project root. */

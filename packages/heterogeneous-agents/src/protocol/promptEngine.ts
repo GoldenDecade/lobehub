@@ -76,7 +76,7 @@ const defaultContextProviders = [lobeHubCliProvider, topicReferenceGuidanceProvi
  * Only a single leading token of the user's own text is hoisted. A slash later
  * in the message, or a message that is only the guide, is left untouched.
  */
-const LEADING_SLASH_INVOCATION = /^(\/[A-Za-z0-9_.-]+)(?=$|\s)/;
+const LEADING_SLASH_INVOCATION = /^(\/[A-Za-z0-9_.-]+(?::[A-Za-z0-9_.-]+)?)(?=$|\s)/;
 
 export function hoistLeadingSlashInvocation(blocks: AgentContentBlock[]): AgentContentBlock[] {
   const firstText = blocks.findIndex((block) => block.type === 'text' && block.text.length > 0);

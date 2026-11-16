@@ -1,3 +1,8 @@
+export {
+  type CliSkillAgentType,
+  isCliSlashSkillSource,
+  resolveCliSkillAgentType,
+} from './cliSkillSource';
 export { filterSkillItems } from './filterSkillItems';
 export { openRenameSkillModal } from './RenameSkillModal';
 export type { SkillSectionHeader, SkillSectionProps } from './SkillSection';

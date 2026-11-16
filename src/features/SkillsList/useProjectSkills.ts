@@ -122,7 +122,7 @@ export const useProjectSkills = (
   const onOpenFile = useCallback(
     (item: SkillListItem, relativePath: string) => {
       const skill = skillByDir.get(item.id);
-      if (!skill) return;
+      if (!skill || !skill.path) return;
       openSkillFile(skill, path.join(skill.skillDir, relativePath));
     },
     [openSkillFile, skillByDir],
@@ -131,14 +131,18 @@ export const useProjectSkills = (
   const onOpenSkill = useCallback(
     (item: SkillListItem) => {
       const skill = skillByDir.get(item.id);
-      if (!skill) return;
+      if (!skill || !skill.path) return;
       openSkillFile(skill, skill.path);
     },
     [openSkillFile, skillByDir],
   );
 
   const getRowActions = useCallback(
-    (_item: SkillListItem): SkillRowAction[] => {
+    (item: SkillListItem): SkillRowAction[] => {
+      // Binary-compiled built-in skills (`claude-code-builtin`) have no SKILL.md on disk.
+      const skill = skillByDir.get(item.id);
+      if (!skill?.path) return [];
+
       const comingSoon = t('workingPanel.skills.actions.comingSoon');
       return [
         {
@@ -172,7 +176,7 @@ export const useProjectSkills = (
         },
       ];
     },
-    [onOpenSkill, t],
+    [onOpenSkill, skillByDir, t],
   );
 
   const retry = useCallback(() => {

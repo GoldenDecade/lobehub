@@ -7,6 +7,7 @@ import { useEffectiveWorkingDirectory } from '@/hooks/useEffectiveWorkingDirecto
 import { useAgentStore } from '@/store/agent';
 import { agentByIdSelectors } from '@/store/agent/selectors';
 
+import { resolveCliSkillAgentType } from './cliSkillSource';
 import { useProjectSkills } from './useProjectSkills';
 
 export interface ResolvedProjectSkill {
@@ -64,10 +65,12 @@ export const useProjectSkillResolver = (
 
   // Local desktop reads over IPC; a bound device reads over RPC. Shares the SWR
   // key with the slash menu / sidebar, so this adds no extra fetch.
+  const cliAgentType = resolveCliSkillAgentType(agencyConfig?.heterogeneousProvider);
   const projectSkillsEnabled = (isDesktop || !!remoteDeviceId) && !!workingDirectory;
   const { items, onOpenSkill } = useProjectSkills(
     projectSkillsEnabled ? workingDirectory : undefined,
     remoteDeviceId,
+    cliAgentType,
   );
 
   return useCallback(
@@ -78,8 +81,9 @@ export const useProjectSkillResolver = (
         description: item.description,
         name: item.name,
         // Preview opens in every mode now — onOpenSkill reads over IPC locally
-        // and over RPC for a bound device (like the Files tab).
-        open: () => onOpenSkill(item),
+        // and over RPC for a bound device (like the Files tab). Binary-compiled
+        // built-in skills carry no files on disk, so leave `open` unset.
+        ...((item.files?.length ?? 0) > 0 ? { open: () => onOpenSkill(item) } : {}),
       };
     },
     [items, onOpenSkill],

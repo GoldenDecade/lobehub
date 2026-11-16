@@ -6,6 +6,7 @@ export {
   resolveClaudeCodeProjectRoot,
   toClaudeCodeProjectKey,
 } from './claudeCodeMemory';
+export { listClaudeCodeSkills, type ListClaudeCodeSkillsOptions } from './claudeCodeSkills';
 export { getCodexQuota, type GetCodexQuotaParams } from './codexQuota';
 export {
   APP_UPDATE_UNSUPPORTED_MESSAGE,
