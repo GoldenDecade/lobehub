@@ -2,6 +2,7 @@ import type debug from 'debug';
 import type OpenAI from 'openai';
 import type { Stream } from 'openai/streaming';
 
+import { isGoogleModelId } from '../../../providers/google/modelId';
 import type { ChatMethodOptions, ChatStreamPayload } from '../../../types';
 import { respondJsonAfterStream } from '../../../utils/consumeStream';
 import { debugPayload, debugResponse, debugStream } from '../../../utils/debugStream';
@@ -48,7 +49,14 @@ export const chatViaChatCompletions = async (
     responseMode,
   }: ChatCompletionsRequest,
 ): Promise<Response> => {
-  // Sanitize temperature/top_p conflict for Claude 4+ models routed via OpenAI-compatible API.
+  const requestModel =
+    runtime.withMappedRequestModel({ model: handledPayload.model }, payload.model).model ??
+    payload.model;
+  const omitFrequencyPenalty =
+    isGoogleModelId(handledPayload.model) || isGoogleModelId(requestModel);
+
+  // Sanitize temperature/top_p conflict for Claude 4+ models and unsupported frequency_penalty
+  // for Google/Gemini models routed via OpenAI-compatible API.
   // normalizeTemperature is false here because OpenAI-compatible providers use the raw range.
   const postPayload = {
     ...handledPayload,
@@ -56,11 +64,8 @@ export const chatViaChatCompletions = async (
       normalizeTemperature: false,
       preferTemperature: true,
     }),
+    ...(omitFrequencyPenalty && { frequency_penalty: undefined }),
   };
-
-  const requestModel =
-    runtime.withMappedRequestModel({ model: postPayload.model }, payload.model).model ??
-    payload.model;
   const thoughtSignatureScope = await runtime.getSignatureScope(
     requestModel,
     'thought_signature',
@@ -112,6 +117,9 @@ export const chatViaChatCompletions = async (
       ...resolveModelSamplingParameters(cleanProcessedPayload.model, cleanProcessedPayload, {
         normalizeTemperature: false,
         preferTemperature: true,
+      }),
+      ...((isGoogleModelId(cleanProcessedPayload.model) || isGoogleModelId(requestModel)) && {
+        frequency_penalty: undefined,
       }),
     };
     const requestPayload = runtime.withMappedRequestModel(customRequestPayload, payload.model);

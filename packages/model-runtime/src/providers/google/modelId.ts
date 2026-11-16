@@ -75,8 +75,11 @@ const extractGoogleModelId = (model: string): ExtractedGoogleModelId | undefined
   if (!normalized) return;
 
   if (normalized.startsWith('google/')) {
+    const withoutGooglePrefix = normalized.slice('google/'.length);
     return {
-      normalizedModelId: normalized.slice('google/'.length),
+      normalizedModelId: withoutGooglePrefix.startsWith('models/')
+        ? withoutGooglePrefix.slice('models/'.length)
+        : withoutGooglePrefix,
       source: 'googlePrefixed',
     };
   }
@@ -108,6 +111,19 @@ const extractGoogleModelId = (model: string): ExtractedGoogleModelId | undefined
 
 export const normalizeGoogleModelId = (model: string): string | undefined =>
   extractGoogleModelId(model)?.normalizedModelId;
+
+export const isGoogleModelId = (model: string | undefined): boolean => {
+  if (!model) return false;
+  const normalizedModelId = normalizeGoogleModelId(model);
+  if (!normalizedModelId) return false;
+
+  return (
+    normalizedModelId.startsWith('gemini-') ||
+    normalizedModelId.startsWith('gemma-') ||
+    normalizedModelId.startsWith('learnlm') ||
+    normalizedModelId.startsWith('nano-banana')
+  );
+};
 
 const normalizeGoogleModelIdForAlias = (model: string): string | undefined => {
   const normalizedModelId = normalizeGoogleModelId(model);

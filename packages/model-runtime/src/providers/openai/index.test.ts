@@ -456,6 +456,44 @@ describe('LobeOpenAI', () => {
       expect(createCall.presence_penalty).toBe(0.3);
       expect(createCall.stream).toBe(true);
     });
+
+    it('should omit default zero frequency_penalty and presence_penalty for regular/custom models', async () => {
+      const payload = {
+        frequency_penalty: 0,
+        messages: [{ content: 'Hello', role: 'user' as const }],
+        model: 'v0/v0-opus',
+        presence_penalty: 0,
+        temperature: 1,
+        top_p: 1,
+      };
+
+      await instance.chat(payload);
+
+      const createCall = (instance['client'].chat.completions.create as Mock).mock.calls[0][0];
+      expect(createCall.model).toBe('v0/v0-opus');
+      expect(createCall.frequency_penalty).toBeUndefined();
+      expect(createCall.presence_penalty).toBeUndefined();
+      expect(createCall.temperature).toBe(1);
+      expect(createCall.top_p).toBe(1);
+    });
+
+    it('should omit non-zero frequency_penalty for Google/Gemini models while preserving non-zero presence_penalty', async () => {
+      const payload = {
+        frequency_penalty: 0.5,
+        messages: [{ content: 'Hello', role: 'user' as const }],
+        model: 'google/models/gemini-4-hydrogen',
+        presence_penalty: 0.3,
+        temperature: 0.7,
+        top_p: 0.9,
+      };
+
+      await instance.chat(payload);
+
+      const createCall = (instance['client'].chat.completions.create as Mock).mock.calls[0][0];
+      expect(createCall.model).toBe('google/models/gemini-4-hydrogen');
+      expect(createCall.frequency_penalty).toBeUndefined();
+      expect(createCall.presence_penalty).toBe(0.3);
+    });
   });
 
   describe('responses.handlePayload', () => {

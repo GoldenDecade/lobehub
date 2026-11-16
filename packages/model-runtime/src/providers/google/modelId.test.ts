@@ -4,6 +4,7 @@ import {
   isGemini3OrAbove,
   isGeminiVersionAtLeast,
   isGoogleImageResponseModel,
+  isGoogleModelId,
   isGoogleNanoBananaModel,
   isGoogleSafetyOffModel,
   normalizeGoogleModelId,
@@ -21,10 +22,30 @@ describe('modelId', () => {
     it.each([
       ['gemini-3.5-pro', 'gemini-3.5-pro'],
       ['google/gemini-3.5-pro', 'gemini-3.5-pro'],
+      ['google/models/gemini-4-hydrogen', 'gemini-4-hydrogen'],
       ['models/gemini-3.5-pro', 'gemini-3.5-pro'],
       ['publishers/google/models/gemini-3.5-pro', 'gemini-3.5-pro'],
     ])('normalizes %s', (model, expected) => {
       expect(normalizeGoogleModelId(model)).toBe(expected);
+    });
+  });
+
+  describe('isGoogleModelId', () => {
+    it.each([
+      ['gemini-2.5-pro', true],
+      ['google/gemini-3.5-pro', true],
+      ['google/models/gemini-4-hydrogen', true],
+      ['models/gemini-2.5-flash', true],
+      ['publishers/google/models/gemini-3.5-pro', true],
+      ['gemma-3-27b-it', true],
+      ['gemini-nano-banana-2.1', true],
+      ['gpt-4o', false],
+      ['v0/v0-opus', false],
+      ['custom/models/gpt-4o', false],
+      ['', false],
+      [undefined, false],
+    ])('detects Google model family for %s', (model, expected) => {
+      expect(isGoogleModelId(model)).toBe(expected);
     });
   });
 

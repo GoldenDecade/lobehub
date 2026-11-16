@@ -68,6 +68,8 @@ export const params = {
 
       return {
         ...rest,
+        ...(rest.frequency_penalty === 0 && { frequency_penalty: undefined }),
+        ...(rest.presence_penalty === 0 && { presence_penalty: undefined }),
         ...(containsAudioInput && { apiMode: 'chatCompletion' }),
         model,
         ...(enableServiceTierFlex &&

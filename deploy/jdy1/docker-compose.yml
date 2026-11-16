@@ -42,6 +42,8 @@ services:
       - 'AGENT_GATEWAY_INTERNAL_URL=http://gateway:8787'
       - 'AGENT_GATEWAY_SERVICE_TOKEN=${GATEWAY_SERVICE_TOKEN:-}'
       - 'DEVICE_GATEWAY_SERVICE_TOKEN=${GATEWAY_SERVICE_TOKEN:-}'
+      # Relay fetchOnClient / local device providers (Magpie, Ollama) back to the active desktop/browser tab
+      - 'FEATURE_FLAGS=${FEATURE_FLAGS:-+agent_llm_relay}'
     env_file:
       - .env
     volumes:
