@@ -9,6 +9,7 @@ import { executeHeterogeneousAgent } from '../transports/hetero/heterogeneousAge
 const mockBatchMutate = vi.fn();
 const mockCreateMessage = vi.fn();
 const mockUpdateMessage = vi.fn();
+const mockUpdateMessageError = vi.fn(async () => ({ success: false }));
 const mockUpdateToolMessage = vi.fn();
 vi.mock('@/services/message', () => ({
   messageService: {
@@ -16,7 +17,7 @@ vi.mock('@/services/message', () => ({
     createMessage: (...args: any[]) => mockCreateMessage(...args),
     getMessages: vi.fn(async () => []),
     updateMessage: (...args: any[]) => mockUpdateMessage(...args),
-    updateMessageError: vi.fn(async () => ({ success: false })),
+    updateMessageError: (...args: any[]) => mockUpdateMessageError(...args),
     updateToolMessage: (...args: any[]) => mockUpdateToolMessage(...args),
   },
 }));
@@ -250,6 +251,52 @@ describe('heterogeneousAgentExecutor — Antigravity', () => {
     expect(store.updateTopicMetadata).toHaveBeenCalledWith(
       'topic-1',
       expect.objectContaining({ heteroSessionId: 'agy-conversation' }),
+    );
+  });
+
+  it('completes cleanly without persisting a false error when agy echoes a sticky historical ERROR_MESSAGE in result', async () => {
+    const { store } = await runWithEvents([
+      { event: 'init', conversation_id: 'agy-conversation', init: { cwd: '/project' } },
+      {
+        event: 'step_update',
+        step_update: {
+          conversation_id: 'agy-conversation',
+          state: 'DONE',
+          step_index: 267,
+          step_type: 'user_input',
+        },
+      },
+      {
+        event: 'step_update',
+        step_update: {
+          conversation_id: 'agy-conversation',
+          state: 'DONE',
+          step_index: 277,
+          step_type: 'agent_response',
+          text_delta: 'All checks passed.',
+          usage: { input_tokens: 10, output_tokens: 5 },
+        },
+      },
+      {
+        event: 'result',
+        result: {
+          conversation_id: 'agy-conversation',
+          error: 'The stream was interrupted. Please continue the task you were working on.',
+          response: 'All checks passed.',
+          status: 'ERROR',
+          usage: { input_tokens: 500, output_tokens: 120 },
+        },
+      },
+    ]);
+
+    expect(mockUpdateMessage).toHaveBeenCalledWith(
+      'ast-initial',
+      expect.objectContaining({ content: 'All checks passed.' }),
+      expect.anything(),
+    );
+    expect(mockUpdateMessageError).not.toHaveBeenCalled();
+    expect(store.markTopicUnread).toHaveBeenCalledWith(
+      expect.objectContaining({ agentId: 'agent-1', topicId: 'topic-1' }),
     );
   });
 });

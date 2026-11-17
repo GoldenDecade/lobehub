@@ -54,11 +54,13 @@ export class AntigravityAdapter implements AgentEventAdapter {
   private completedSteps = new Set<number>();
   private flushed = false;
   private hasResponseText = false;
+  private latestNonCheckpointStep?: number;
   private model?: string;
   private pendingTools = new Map<number, PendingTool>();
   private resultReceived = false;
   private completionValidated = false;
   private responseStep?: number;
+  private responseStepErrored = false;
   private stepIndex = 0;
   private stepTools: ToolCallPayload[] = [];
   private streamOpen = false;
@@ -83,6 +85,9 @@ export class AntigravityAdapter implements AgentEventAdapter {
     if (this.sessionId && conversationId && conversationId !== this.sessionId) return [];
     this.sessionId ??= conversationId;
     if (this.completedSteps.has(index)) return [];
+    if (step.step_type !== 'checkpoint') {
+      this.latestNonCheckpointStep = Math.max(this.latestNonCheckpointStep ?? -1, index);
+    }
 
     const events: HeterogeneousAgentEvent[] = [];
     if (step.step_type === 'agent_response') {
@@ -94,10 +99,14 @@ export class AntigravityAdapter implements AgentEventAdapter {
         this.stepIndex += 1;
         this.stepTools = [];
         this.hasResponseText = false;
+        this.responseStepErrored = false;
       }
       events.push(...this.openStream());
       this.toolSinceResponse = false;
       this.responseStep = index;
+      if (step.error != null || step.state === 'ERROR') {
+        this.responseStepErrored = true;
+      }
       if (typeof step.text_delta === 'string' && step.text_delta) {
         this.hasResponseText = true;
         events.push(this.event('stream_chunk', { chunkType: 'text', content: step.text_delta }));
@@ -265,13 +274,35 @@ export class AntigravityAdapter implements AgentEventAdapter {
     return events;
   }
 
+  /**
+   * Like `result.usage`, agy's terminal `result.status` / `result.error` scans
+   * the whole conversation trajectory rather than just the active turn. A single
+   * historical or auto-retried `ERROR_MESSAGE` step (such as a transient stream
+   * interruption that agy already recovered from) permanently stamps
+   * `status: "ERROR"` onto that turn and every later `--conversation` turn.
+   * Trust the per-turn `step_update` stream when this turn finished cleanly on a
+   * `DONE` `agent_response` with non-empty text.
+   */
+  private hasCompletedTurnResponse(result: UnknownRecord, hasPendingTools: boolean): boolean {
+    if (result.status !== 'ERROR' || hasPendingTools || this.toolSinceResponse) return false;
+    if (isRecord(result.json_schema) && result.structured_output === undefined) return false;
+    return (
+      !this.responseStepErrored &&
+      this.responseStep !== undefined &&
+      this.completedSteps.has(this.responseStep) &&
+      this.latestNonCheckpointStep === this.responseStep &&
+      this.hasResponseText &&
+      Boolean(pickString(result.response)?.trim())
+    );
+  }
+
   private handleResult(result: UnknownRecord): HeterogeneousAgentEvent[] {
     this.resultReceived = true;
     this.sessionId ??= pickString(result.conversation_id);
     const hasPendingTools = this.pendingTools.size > 0;
     // Materialize unfinished tools in their owning turn before a fallback response opens a new one.
     const events = this.settlePendingTools('Antigravity ended before this tool returned a result.');
-    if (result.status === 'SUCCESS') {
+    if (result.status === 'SUCCESS' || this.hasCompletedTurnResponse(result, hasPendingTools)) {
       // result.response repeats the streamed answer. Use it only when no final
       // response was streamed, never as another delta after agent_response.
       if (

@@ -231,6 +231,119 @@ describe('AntigravityAdapter', () => {
     },
   );
 
+  it('ignores sticky trajectory ERROR status when this turn completed a final agent_response', () => {
+    const adapter = new AntigravityAdapter();
+    const events = [
+      init,
+      step(267, { step_type: 'user_input' }),
+      tool(270),
+      step(277, { state: 'ACTIVE', text_delta: 'All 8 checks ' }),
+      step(277, {
+        state: 'DONE',
+        text_delta: 'passed.\n',
+        usage: { input_tokens: 100, output_tokens: 20 },
+      }),
+      step(278, {
+        state: 'DONE',
+        step_type: 'checkpoint',
+        usage: { input_tokens: 5, output_tokens: 1 },
+      }),
+      result({
+        error: 'The stream was interrupted. Please continue the task you were working on.',
+        response: 'All 8 checks passed.\n',
+        status: 'ERROR',
+      }),
+    ].flatMap((raw) => adapter.adapt(raw));
+
+    expect(events.filter((e) => e.type === 'error')).toEqual([]);
+    expect(text(events)).toBe('All 8 checks passed.\n');
+    expect(adapter.validateCompletion()).toEqual([]);
+  });
+
+  it('ignores sticky ERROR status after an in-turn stream interruption auto-retries and completes', () => {
+    const adapter = new AntigravityAdapter();
+    const events = [
+      init,
+      step(179, { state: 'DONE', text_delta: '' }),
+      step(180, { state: 'DONE', step_type: 'system_message' }),
+      step(181, { state: 'DONE', text_delta: 'Recovered full reply.\n' }),
+      result({
+        error: 'The stream was interrupted. Please continue the task you were working on.',
+        response: 'Recovered full reply.\n',
+        status: 'ERROR',
+      }),
+    ].flatMap((raw) => adapter.adapt(raw));
+
+    expect(events.filter((e) => e.type === 'error')).toEqual([]);
+    expect(text(events)).toBe('Recovered full reply.\n');
+  });
+
+  it('still emits terminal error when an interrupted turn did not finish with a clean agent_response', () => {
+    const detail = 'The stream was interrupted. Please continue the task you were working on.';
+
+    // 1. agent_response stayed ACTIVE (cutoff mid-stream, never reached DONE)
+    const activeCutoff = new AntigravityAdapter();
+    const activeEvents = [
+      init,
+      step(10, { state: 'ACTIVE', text_delta: 'Partial answer' }),
+      result({ error: detail, response: 'Partial answer', status: 'ERROR' }),
+    ].flatMap((raw) => activeCutoff.adapt(raw));
+    expect(activeEvents).toContainEqual(
+      expect.objectContaining({
+        data: expect.objectContaining({ code: 'antigravity_run_error', message: detail }),
+        type: 'error',
+      }),
+    );
+
+    // 2. An error/system step occurred after the last agent_response without a later recovery step
+    const unrecoveredStep = new AntigravityAdapter();
+    const unrecoveredEvents = [
+      init,
+      step(10, { state: 'DONE', text_delta: 'Partial answer' }),
+      step(11, { state: 'DONE', step_type: 'system_message' }),
+      result({ error: detail, response: 'Partial answer', status: 'ERROR' }),
+    ].flatMap((raw) => unrecoveredStep.adapt(raw));
+    expect(unrecoveredEvents).toContainEqual(
+      expect.objectContaining({
+        data: expect.objectContaining({ code: 'antigravity_run_error', message: detail }),
+        type: 'error',
+      }),
+    );
+
+    // 3. Explicit cancellation/interruption statuses are never suppressed
+    for (const status of ['CANCELED', 'INTERRUPTED']) {
+      const canceled = new AntigravityAdapter();
+      const canceledEvents = [
+        init,
+        step(10, { state: 'DONE', text_delta: 'Done text' }),
+        result({ response: 'Done text', status }),
+      ].flatMap((raw) => canceled.adapt(raw));
+      expect(canceledEvents.some((e) => e.type === 'error')).toBe(true);
+    }
+
+    // 4. --json-schema validation failure after a completed agent_response still surfaces
+    const schemaFailure = new AntigravityAdapter();
+    const schemaEvents = [
+      init,
+      step(10, { state: 'DONE', text_delta: 'not valid json' }),
+      result({
+        error: 'failed to validate structured output',
+        json_schema: { type: 'object' },
+        response: 'not valid json',
+        status: 'ERROR',
+      }),
+    ].flatMap((raw) => schemaFailure.adapt(raw));
+    expect(schemaEvents).toContainEqual(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          code: 'antigravity_run_error',
+          message: 'failed to validate structured output',
+        }),
+        type: 'error',
+      }),
+    );
+  });
+
   it('uses result-only text as a fallback, including after tool work', () => {
     const adapter = new AntigravityAdapter();
     const events = [init, step(1, { text_delta: 'Checking.' }), tool(3), result()].flatMap((raw) =>
