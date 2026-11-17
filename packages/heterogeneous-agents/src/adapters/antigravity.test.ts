@@ -173,6 +173,83 @@ describe('AntigravityAdapter', () => {
     expect(adapter.adapt(completed)).toEqual([]);
   });
 
+  it('settles real agy ERROR tool steps and detached background tools without failing a completed turn', () => {
+    const adapter = new AntigravityAdapter();
+    const events = [
+      init,
+      // Backgrounded run_command detaches and stays ACTIVE while the model continues.
+      tool(2, {
+        state: 'ACTIVE',
+        tool_info: { name: 'run_command', parameters: { CommandLine: 'sleep 15' } },
+      }),
+      // Failed read_file ends with state: ERROR in real agy, not state: DONE.
+      tool(3, {
+        state: 'ACTIVE',
+        tool_info: { name: 'read_file', parameters: { Path: '/tmp/missing.txt' } },
+      }),
+      tool(3, {
+        state: 'ERROR',
+        tool_info: {
+          error: { message: 'file does not exist', type: 'TOOL_ERROR' },
+          name: 'read_file',
+          parameters: { Path: '/tmp/missing.txt' },
+        },
+      }),
+      step(5, { state: 'DONE', text_delta: 'Handled missing file and finished.\n' }),
+      result({
+        error: 'The stream was interrupted. Please continue the task you were working on.',
+        response: 'Handled missing file and finished.\n',
+        status: 'ERROR',
+      }),
+    ].flatMap((raw) => adapter.adapt(raw));
+
+    expect(events.filter((e) => e.type === 'error')).toEqual([]);
+    const toolResults = events.filter((e) => e.type === 'tool_result');
+    expect(toolResults).toEqual([
+      expect.objectContaining({
+        data: {
+          content: 'file does not exist',
+          isError: true,
+          toolCallId: 'agy_conv-1_3',
+        },
+        stepIndex: 0,
+      }),
+      expect.objectContaining({
+        data: {
+          content: 'Running in background.',
+          isError: false,
+          toolCallId: 'agy_conv-1_2',
+        },
+        stepIndex: 0,
+      }),
+    ]);
+    expect(text(events)).toBe('Handled missing file and finished.\n');
+  });
+
+  it('still emits incomplete_tool_result when a trailing ACTIVE tool never settles before SUCCESS result', () => {
+    const adapter = new AntigravityAdapter();
+    const events = [
+      init,
+      step(1, { state: 'DONE', text_delta: 'Checking.' }),
+      tool(2, {
+        state: 'ACTIVE',
+        tool_info: { name: 'run_command', parameters: { CommandLine: 'echo hi' } },
+      }),
+      result({ response: '', status: 'SUCCESS' }),
+    ].flatMap((raw) => adapter.adapt(raw));
+
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        data: expect.objectContaining({ code: 'incomplete_tool_result' }),
+        type: 'error',
+      }),
+    );
+    expect(events.find((e) => e.type === 'tool_result')?.data).toMatchObject({
+      isError: true,
+      toolCallId: 'agy_conv-1_2',
+    });
+  });
+
   it('settles unfinished tools on interruption and detects missing terminal results', () => {
     const adapter = new AntigravityAdapter();
     adapter.adapt(init);

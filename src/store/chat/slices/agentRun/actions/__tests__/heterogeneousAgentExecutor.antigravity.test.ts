@@ -299,4 +299,78 @@ describe('heterogeneousAgentExecutor — Antigravity', () => {
       expect.objectContaining({ agentId: 'agent-1', topicId: 'topic-1' }),
     );
   });
+
+  it('persists tool error without failing the assistant reply when an agy tool step ends in ERROR and a background command stays ACTIVE', async () => {
+    await runWithEvents([
+      { event: 'init', conversation_id: 'agy-conversation', init: { cwd: '/project' } },
+      {
+        event: 'step_update',
+        step_update: {
+          conversation_id: 'agy-conversation',
+          state: 'ACTIVE',
+          step_index: 388,
+          step_type: 'tool',
+          tool_info: { name: 'run_command', parameters: { CommandLine: 'lh agent list' } },
+        },
+      },
+      {
+        event: 'step_update',
+        step_update: {
+          conversation_id: 'agy-conversation',
+          state: 'ACTIVE',
+          step_index: 390,
+          step_type: 'tool',
+          tool_info: { name: 'read_file', parameters: { Path: '/tmp/388.log' } },
+        },
+      },
+      {
+        event: 'step_update',
+        step_update: {
+          conversation_id: 'agy-conversation',
+          state: 'ERROR',
+          step_index: 390,
+          step_type: 'tool',
+          tool_info: {
+            error: { message: 'file does not exist', type: 'TOOL_ERROR' },
+            name: 'read_file',
+            parameters: { Path: '/tmp/388.log' },
+          },
+        },
+      },
+      {
+        event: 'step_update',
+        step_update: {
+          conversation_id: 'agy-conversation',
+          state: 'DONE',
+          step_index: 432,
+          step_type: 'agent_response',
+          text_delta: 'Upgrade plan is ready.',
+          usage: { input_tokens: 100, output_tokens: 20 },
+        },
+      },
+      {
+        event: 'result',
+        result: {
+          conversation_id: 'agy-conversation',
+          error: 'The stream was interrupted. Please continue the task you were working on.',
+          response: 'Upgrade plan is ready.',
+          status: 'ERROR',
+        },
+      },
+    ]);
+
+    expect(mockUpdateMessageError).not.toHaveBeenCalled();
+    const erroredTool = mockCreateMessage.mock.calls.find(
+      ([p]) => p.tool_call_id === 'agy_agy-conversation_390',
+    )?.[0];
+    expect(erroredTool).toBeDefined();
+    expect(mockUpdateToolMessage).toHaveBeenCalledWith(
+      erroredTool.id,
+      expect.objectContaining({
+        content: 'file does not exist',
+        pluginError: expect.objectContaining({ message: 'file does not exist' }),
+      }),
+      expect.anything(),
+    );
+  });
 });

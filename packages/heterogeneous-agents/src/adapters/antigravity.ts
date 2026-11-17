@@ -9,9 +9,11 @@ import type {
 } from '../types';
 
 const IDENTIFIER = 'antigravity';
+const TERMINAL_STEP_STATES = new Set(['CANCELED', 'CANCELLED', 'DONE', 'ERROR']);
 
 interface PendingTool {
   payload: ToolCallPayload;
+  rawStepIndex: number;
   started?: boolean;
   stepIndex: number;
 }
@@ -115,7 +117,7 @@ export class AntigravityAdapter implements AgentEventAdapter {
       events.push(...this.handleTool(index, step));
     }
 
-    if (step.state === 'DONE') {
+    if (TERMINAL_STEP_STATES.has(String(step.state))) {
       this.completedSteps.add(index);
       const usage = extractUsage(step.usage);
       if (usage) this.usageByStep.set(index, usage);
@@ -204,21 +206,28 @@ export class AntigravityAdapter implements AgentEventAdapter {
         identifier: IDENTIFIER,
         type: 'default',
       };
-      pending = { payload, stepIndex: this.stepIndex };
+      pending = { payload, rawStepIndex: index, stepIndex: this.stepIndex };
       this.pendingTools.set(index, pending);
     } else if (info?.parameters !== undefined) {
       pending.payload.arguments = args;
     }
+    const isTerminal = TERMINAL_STEP_STATES.has(String(step.state));
     // Persistence snapshots tools_calling, while trace recorders snapshot tool_start.
     // Neither may publish a name-only ACTIVE update with placeholder arguments.
-    if (info?.parameters !== undefined || step.state === 'DONE')
-      events.push(...this.startTool(pending));
-    if (step.state === 'DONE') {
-      const error = toRecord(info?.error);
+    if (info?.parameters !== undefined || isTerminal) events.push(...this.startTool(pending));
+    if (isTerminal) {
+      const error = toRecord(info?.error) ?? toRecord(step.error);
       const output = stringifyOutput(info?.output ?? subagents);
-      const errorText = pickString(error?.message) ?? stringifyOutput(info?.error);
-      const content = [output, errorText].filter(Boolean).join('\n');
-      events.push(...this.toolResult(pending, content, info?.error != null));
+      const errorText =
+        pickString(error?.message) ??
+        pickString(info?.error) ??
+        pickString(step.error) ??
+        stringifyOutput(info?.error ?? step.error);
+      const isError = step.state !== 'DONE' || info?.error != null || step.error != null;
+      const content =
+        [output, errorText].filter(Boolean).join('\n') ||
+        (isError ? `Tool ended with state ${String(step.state)}.` : '');
+      events.push(...this.toolResult(pending, content, isError));
       this.pendingTools.delete(index);
     }
     return events;
@@ -274,6 +283,28 @@ export class AntigravityAdapter implements AgentEventAdapter {
     return events;
   }
 
+  private settleResultPendingTools(): {
+    events: HeterogeneousAgentEvent[];
+    hasUnsettledTools: boolean;
+  } {
+    const canDetachBackgroundTools =
+      !this.toolSinceResponse &&
+      !this.responseStepErrored &&
+      this.responseStep !== undefined &&
+      this.completedSteps.has(this.responseStep) &&
+      this.hasResponseText;
+    let hasUnsettledTools = false;
+    const events = [...this.pendingTools.values()].flatMap((tool) => {
+      if (canDetachBackgroundTools && tool.rawStepIndex < this.responseStep!) {
+        return this.toolResult(tool, 'Running in background.', false);
+      }
+      hasUnsettledTools = true;
+      return this.toolResult(tool, 'Antigravity ended before this tool returned a result.', true);
+    });
+    this.pendingTools.clear();
+    return { events, hasUnsettledTools };
+  }
+
   /**
    * Like `result.usage`, agy's terminal `result.status` / `result.error` scans
    * the whole conversation trajectory rather than just the active turn. A single
@@ -283,8 +314,8 @@ export class AntigravityAdapter implements AgentEventAdapter {
    * Trust the per-turn `step_update` stream when this turn finished cleanly on a
    * `DONE` `agent_response` with non-empty text.
    */
-  private hasCompletedTurnResponse(result: UnknownRecord, hasPendingTools: boolean): boolean {
-    if (result.status !== 'ERROR' || hasPendingTools || this.toolSinceResponse) return false;
+  private hasCompletedTurnResponse(result: UnknownRecord, hasUnsettledTools: boolean): boolean {
+    if (result.status !== 'ERROR' || hasUnsettledTools || this.toolSinceResponse) return false;
     if (isRecord(result.json_schema) && result.structured_output === undefined) return false;
     return (
       !this.responseStepErrored &&
@@ -299,10 +330,9 @@ export class AntigravityAdapter implements AgentEventAdapter {
   private handleResult(result: UnknownRecord): HeterogeneousAgentEvent[] {
     this.resultReceived = true;
     this.sessionId ??= pickString(result.conversation_id);
-    const hasPendingTools = this.pendingTools.size > 0;
     // Materialize unfinished tools in their owning turn before a fallback response opens a new one.
-    const events = this.settlePendingTools('Antigravity ended before this tool returned a result.');
-    if (result.status === 'SUCCESS' || this.hasCompletedTurnResponse(result, hasPendingTools)) {
+    const { events, hasUnsettledTools } = this.settleResultPendingTools();
+    if (result.status === 'SUCCESS' || this.hasCompletedTurnResponse(result, hasUnsettledTools)) {
       // result.response repeats the streamed answer. Use it only when no final
       // response was streamed, never as another delta after agent_response.
       if (
@@ -319,7 +349,7 @@ export class AntigravityAdapter implements AgentEventAdapter {
           this.event('stream_chunk', { chunkType: 'text', content: result.response }),
         );
       }
-      if (hasPendingTools) {
+      if (hasUnsettledTools) {
         events.push(
           this.event('error', {
             agentType: IDENTIFIER,
