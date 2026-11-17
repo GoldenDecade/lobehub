@@ -176,7 +176,7 @@ const spawnAgentOrRuntime = (
 const RESUME_RETRY_PATTERNS = [
   // Session file missing — sandbox was recycled
   /no conversation found/i,
-  /session.*not found/i,
+  /(?:session.*not found|failed to read session)/i,
   /conversation.*not found/i,
   /resume.*not found/i,
   // Codex reports a missing saved thread (exec and app-server alike) as

@@ -7,6 +7,7 @@
 
 import {
   AmpAdapter,
+  AntigravityAcpAdapter,
   AntigravityAdapter,
   ClaudeCodeAdapter,
   ClaudeCodeSdkAdapter,
@@ -82,6 +83,9 @@ const localAgentRegistry = {
 } satisfies Record<LocalHeterogeneousAgentType, AgentRegistryEntry>;
 
 const runtimeAdapterRegistry = {
+  'antigravity-acp': {
+    createAdapter: () => new AntigravityAcpAdapter(),
+  },
   'claude-code-sdk': {
     createAdapter: () => new ClaudeCodeSdkAdapter(),
   },

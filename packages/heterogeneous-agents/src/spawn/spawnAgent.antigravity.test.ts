@@ -31,37 +31,81 @@ vi.mock('./resolveCliCommand', async () => {
   return { ...actual, detectHeterogeneousCliCommand: vi.fn() };
 });
 
-/** A child that replays `stdoutChunks` once started, then exits cleanly. */
-const createFakeProc = ({ stdoutChunks }: { stdoutChunks: string[] }) => {
+const TINY_PNG_BASE64 =
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+
+/** A child speaking Antigravity ACP over stdio. */
+const createFakeAcpProc = () => {
   const proc = new EventEmitter() as any;
   const stdout = new PassThrough();
   const stderr = new PassThrough();
-  const stdinWrites: string[] = [];
+  const rpcRequests: Array<Record<string, any>> = [];
+  const send = (payload: Record<string, unknown>) => stdout.write(`${JSON.stringify(payload)}\n`);
+
   proc.stdout = stdout;
   proc.stderr = stderr;
   proc.stdin = {
-    end: vi.fn(),
+    end: vi.fn(() => {
+      queueMicrotask(() => {
+        stdout.end();
+        stderr.end();
+        proc.emit('exit', 0, null);
+      });
+    }),
     once: vi.fn(),
     write: vi.fn((chunk: string, cb?: () => void) => {
-      stdinWrites.push(chunk);
+      const msg = JSON.parse(chunk.trim());
+      rpcRequests.push(msg);
+      queueMicrotask(() => {
+        if (msg.method === 'initialize') {
+          send({
+            id: msg.id,
+            result: {
+              agentCapabilities: {
+                loadSession: true,
+                promptCapabilities: { image: true },
+                sessionCapabilities: { close: {}, resume: {} },
+              },
+              protocolVersion: 1,
+            },
+          });
+        } else if (msg.method === 'session/resume') {
+          send({
+            id: msg.id,
+            result: {
+              models: { availableModels: [], currentModelId: 'gemini-4-carbon-high' },
+              sessionId: msg.params.sessionId,
+            },
+          });
+        } else if (msg.method === 'session/prompt') {
+          send({
+            method: 'session/update',
+            params: {
+              sessionId: msg.params.sessionId,
+              update: {
+                content: { text: 'continued with image', type: 'text' },
+                sessionUpdate: 'agent_message_chunk',
+              },
+            },
+          });
+          send({ id: msg.id, result: { stopReason: 'end_turn' } });
+        } else if (msg.method === 'session/close') {
+          send({ id: msg.id, result: {} });
+        }
+      });
       cb?.();
       return true;
     }),
   };
-  proc.kill = vi.fn();
+  proc.kill = vi.fn(() => {
+    proc.killed = true;
+    proc.emit('exit', 0, null);
+    return true;
+  });
   proc.killed = false;
   proc.pid = 12_345;
 
-  const start = () => {
-    setImmediate(() => {
-      for (const c of stdoutChunks) stdout.write(c);
-      stdout.end();
-      stderr.end();
-      proc.emit('exit', 0, null);
-    });
-  };
-
-  return { proc, start, stdinWrites };
+  return { proc, rpcRequests };
 };
 
 describe('spawnAgent — Antigravity', () => {
@@ -74,54 +118,44 @@ describe('spawnAgent — Antigravity', () => {
     });
   });
 
-  it('spawns Antigravity, streams native events and preserves the resumed conversation', async () => {
-    const fake = createFakeProc({
-      stdoutChunks: [
-        JSON.stringify({ event: 'init', conversation_id: 'agy-session', init: {} }) + '\n',
-        JSON.stringify({
-          event: 'step_update',
-          step_update: {
-            conversation_id: 'agy-session',
-            step_index: 8,
-            step_type: 'agent_response',
-            state: 'DONE',
-            text_delta: 'continued',
-          },
-        }) + '\n',
-        JSON.stringify({
-          event: 'result',
-          result: { conversation_id: 'agy-session', status: 'SUCCESS', response: 'continued' },
-        }) + '\n',
-      ],
-    });
+  it('spawns Antigravity over native ACP, attaches images and resumes the conversation', async () => {
+    const fake = createFakeAcpProc();
     nextFakeProc = fake.proc;
     const { spawnAgent } = await import('./spawnAgent');
     const handle = await spawnAgent({
       agentType: 'antigravity',
       operationId: 'op-agy',
-      prompt: 'continue',
+      prompt: [
+        { text: 'continue', type: 'text' },
+        {
+          source: { data: TINY_PNG_BASE64, mediaType: 'image/png', type: 'base64' },
+          type: 'image',
+        },
+      ],
       resumeSessionId: 'agy-session',
     });
-    fake.start();
+
     const events = [];
     for await (const event of handle.events) events.push(event);
     await handle.exit;
+
     expect(spawnCalls[0].command).toBe('agy');
     expect(spawnCalls[0].options.shell).not.toBe(true);
-    expect(spawnCalls[0].args).toEqual([
-      '--input-format',
-      'stream-json',
-      '--output-format',
-      'stream-json',
-      '--dangerously-skip-permissions',
-      '--conversation',
-      'agy-session',
+    expect(spawnCalls[0].args).toEqual(['acp', '--dangerously-skip-permissions']);
+    expect(fake.rpcRequests.map((r) => r.method)).toEqual([
+      'initialize',
+      'session/resume',
+      'session/prompt',
+      'session/close',
     ]);
-    expect(JSON.parse(fake.stdinWrites[0])).toEqual({
-      event: 'user',
-      message: { content: 'continue' },
+    expect(fake.rpcRequests[2].params).toEqual({
+      prompt: [
+        { text: 'continue', type: 'text' },
+        { data: TINY_PNG_BASE64, mimeType: 'image/png', type: 'image' },
+      ],
+      sessionId: 'agy-session',
     });
-    expect(fake.proc.stdin.end).toHaveBeenCalled();
+    expect(handle.sessionId).toBe('agy-session');
     expect(
       events.filter((event) => event.type === 'stream_chunk' && event.data.chunkType === 'text'),
     ).toHaveLength(1);

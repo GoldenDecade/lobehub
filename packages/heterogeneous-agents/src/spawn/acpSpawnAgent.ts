@@ -4,6 +4,7 @@ import { PassThrough } from 'node:stream';
 import type { AgentStreamEvent } from '@lobechat/agent-gateway-client';
 
 import { resolveHeterogeneousAgentCommand } from '../config';
+import { AntigravityAcpSession, buildAntigravityAcpPrompt } from './antigravityAcpSession';
 import { isPathLikeCommand } from './cliSpawn';
 import { buildCopilotAcpPrompt, CopilotAcpSession } from './copilotAcpSession';
 import { buildCursorAcpPrompt, CursorAcpSession } from './cursorAcpSession';
@@ -156,6 +157,34 @@ const createAcpSpawnHandle = (
     },
     stderr: bridge.stderr,
   };
+};
+
+export const spawnAntigravityAcpAgent = async (
+  options: SpawnAgentOptions,
+  command: string,
+  cwd: string,
+): Promise<SpawnAgentHandle> => {
+  const prompt = await buildAntigravityAcpPrompt(options.prompt, options.inputOptions);
+  const bridge = createAcpSpawnBridge();
+  const session = new AntigravityAcpSession({
+    args: options.extraArgs ?? [],
+    clientVersion: 'lobehub-cli',
+    commandPath: command,
+    cwd,
+    detached: options.detached,
+    env: { ...process.env, ...options.env },
+    initialModel: options.initialModel,
+    onEvents: bridge.onEvents,
+    onRawMessage: teeAcpRawStdout(options.onRawStdout),
+    onRuntimeStatus: () => {},
+    onSessionId: () => {},
+    onStderr: bridge.onStderr,
+    operationId: options.operationId,
+    prompt,
+    resumeSessionId: options.resumeSessionId,
+    sessionId: options.operationId,
+  });
+  return createAcpSpawnHandle(bridge, session);
 };
 
 export const spawnGrokAcpAgent = async (

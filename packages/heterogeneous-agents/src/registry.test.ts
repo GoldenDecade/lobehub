@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   AmpAdapter,
+  AntigravityAcpAdapter,
   ClaudeCodeAdapter,
   CodeBuddyAdapter,
   CodexAdapter,
@@ -25,6 +26,10 @@ describe('registry', () => {
     it('creates an AmpAdapter for "amp"', () => {
       const adapter = createAdapter('amp');
       expect(adapter).toBeInstanceOf(AmpAdapter);
+    });
+
+    it('creates an AntigravityAcpAdapter for the native ACP runtime', () => {
+      expect(createAdapter('antigravity-acp')).toBeInstanceOf(AntigravityAcpAdapter);
     });
 
     it('creates a ClaudeCodeAdapter for "claude-code"', () => {
@@ -96,6 +101,7 @@ describe('registry', () => {
       expect(listLocalAgentTypes().toSorted()).toEqual(
         HETEROGENEOUS_AGENT_CONFIGS.map(({ type }) => type).toSorted(),
       );
+      expect(listAgentTypes()).toContain('antigravity-acp');
       expect(listAgentTypes()).toContain('claude-code-sdk');
       expect(listAgentTypes()).toContain('cursor-acp');
       expect(listAgentTypes()).toContain('droid-acp');

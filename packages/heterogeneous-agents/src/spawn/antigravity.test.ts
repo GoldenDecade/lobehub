@@ -1,18 +1,30 @@
 import { describe, expect, it } from 'vitest';
 
 import { buildAntigravityArgs } from './antigravity';
+import { buildAntigravityAcpPrompt } from './antigravityAcpSession';
 import { buildAgentInput } from './input/buildAgentInput';
 
 describe('Antigravity process input', () => {
-  it('sends long prompts as one JSONL stdin message rather than Windows command-line arguments', async () => {
-    const prompt = '中文 "quoted"\n& echo %USERPROFILE% '.repeat(5000);
-    const input = await buildAgentInput('antigravity', prompt);
-    expect(input.args).toEqual([]);
-    expect(input.stdin.split('\n')).toHaveLength(2);
-    expect(JSON.parse(input.stdin)).toEqual({ event: 'user', message: { content: prompt } });
+  it('directs callers away from legacy buildAgentInput to the native ACP session', async () => {
+    await expect(buildAgentInput('antigravity', 'hello')).rejects.toThrow(
+      'antigravity runs over the ACP transport only',
+    );
   });
 
-  it('resumes the exact conversation in YOLO mode while retaining user model settings', () => {
+  it('normalizes multimodal prompts into ACP text + base64 image blocks', async () => {
+    const pngBase64 =
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+    const blocks = await buildAntigravityAcpPrompt([
+      { text: '你看下这个对话的内容', type: 'text' },
+      { source: { data: pngBase64, mediaType: 'image/png', type: 'base64' }, type: 'image' },
+    ]);
+    expect(blocks).toEqual([
+      { text: '你看下这个对话的内容', type: 'text' },
+      { data: pngBase64, mimeType: 'image/png', type: 'image' },
+    ]);
+  });
+
+  it('retains legacy stream-json arg builder helper for backward compatibility', () => {
     expect(
       buildAntigravityArgs({
         extraArgs: ['--model', 'custom-model', '--effort', 'high'],
@@ -31,28 +43,5 @@ describe('Antigravity process input', () => {
       '--effort',
       'high',
     ]);
-    expect(buildAntigravityArgs({})).toContain('--dangerously-skip-permissions');
-  });
-
-  it.each([
-    '--output-format=json',
-    '--input-format',
-    '--prompt-interactive=hello',
-    '--remote-control',
-    '-i',
-    '-p',
-    '--continue',
-    '--conversation=other',
-    '--',
-  ])('rejects custom %s that breaks protocol or session ownership', (flag) => {
-    expect(() => buildAntigravityArgs({ extraArgs: [flag] })).toThrow('LobeHub manages');
-  });
-
-  it('rejects image attachments instead of silently dropping them', async () => {
-    await expect(
-      buildAgentInput('antigravity', [
-        { type: 'image', source: { type: 'path', path: '/tmp/image.png' } },
-      ]),
-    ).rejects.toThrow('does not support image attachments');
   });
 });

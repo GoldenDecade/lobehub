@@ -7,6 +7,7 @@ import {
   isHeterogeneousAgentAuthRequired,
   isRemoteHeterogeneousType,
   resolveHeterogeneousAgentCommand,
+  usesHeterogeneousSessionInitialModel,
 } from './config';
 import { getHeterogeneousTypeLabel } from './labels';
 
@@ -106,5 +107,6 @@ describe('heterogeneous agent config', () => {
     expect(isRemoteHeterogeneousType('trae')).toBe(false);
     expect(isRemoteHeterogeneousType('openclaw')).toBe(true);
     expect(isRemoteHeterogeneousType('hermes')).toBe(true);
+    expect(usesHeterogeneousSessionInitialModel('antigravity')).toBe(true);
   });
 });

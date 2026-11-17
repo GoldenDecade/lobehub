@@ -514,9 +514,15 @@ export default class HeterogeneousAgentCtr {
    * (pi RPC, codex app-server, ACP sessions, Claude SDK) register here so a
    * future agent adopting an RPC mode only adds one entry — no dispatch edit.
    */
+  private readonly dispatchAcp: HeterogeneousRuntimeDispatcher = async (params, session) => {
+    await this.sendPromptWithAcp(params, session);
+    return true;
+  };
+
   private readonly runtimeDispatchers: Partial<
     Record<HeterogeneousAgentType, HeterogeneousRuntimeDispatcher>
   > = {
+    'antigravity': this.dispatchAcp,
     'claude-code': async (params, session) => {
       if (!(session.useClaudeCodeSdk || this.isClaudeCodeSdkLabEnabled)) return false;
       try {
@@ -555,34 +561,16 @@ export default class HeterogeneousAgentCtr {
       });
       return false;
     },
-    'copilot': async (params, session) => {
-      await this.sendPromptWithAcp(params, session);
-      return true;
-    },
-    'cursor': async (params, session) => {
-      await this.sendPromptWithAcp(params, session);
-      return true;
-    },
-    'devin': async (params, session) => {
-      await this.sendPromptWithAcp(params, session);
-      return true;
-    },
-    'droid': async (params, session) => {
-      await this.sendPromptWithAcp(params, session);
-      return true;
-    },
+    'copilot': this.dispatchAcp,
+    'cursor': this.dispatchAcp,
+    'devin': this.dispatchAcp,
+    'droid': this.dispatchAcp,
     'deepseek-harness': async (params, session) => {
       await this.sendPromptWithDsh(params, session);
       return true;
     },
-    'grok-build': async (params, session) => {
-      await this.sendPromptWithAcp(params, session);
-      return true;
-    },
-    'trae': async (params, session) => {
-      await this.sendPromptWithAcp(params, session);
-      return true;
-    },
+    'grok-build': this.dispatchAcp,
+    'trae': this.dispatchAcp,
     // Pi runs exclusively over the RPC transport — there is no json fallback.
     'pi': async (params, session) => {
       try {

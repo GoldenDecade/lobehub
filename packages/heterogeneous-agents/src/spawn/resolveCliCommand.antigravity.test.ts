@@ -26,6 +26,9 @@ const execFileMock = vi.mocked(childProcess.execFile);
 const execMock = vi.mocked(childProcess.exec);
 const accessMock = vi.mocked(fsPromises.access);
 
+const ACP_HELP_OUTPUT =
+  'Usage of agy:\n  --dangerously-skip-permissions\nAvailable subcommands:\n  acp  Start the Agent Client Protocol (ACP) stdio server';
+
 /** Declare which paths exist on the fake host. */
 const existingFiles = (files: Record<string, true>) => {
   const entries = new Set(Object.keys(files).map((filePath) => filePath.toLowerCase()));
@@ -70,21 +73,21 @@ describe('resolveCliCommand — Antigravity', () => {
     vi.resetModules();
   });
 
-  it('detects Antigravity stream-json and preserves prerelease/build versions', async () => {
+  it('detects Antigravity ACP support and preserves prerelease/build versions', async () => {
     callExecFile('/Users/x/.local/bin/agy\n');
-    callExecFile('1.2.13-beta.1+build.5');
-    callExecFile('', '--input-format --output-format stream-json --conversation');
+    callExecFile('1.5.10-beta.1+build.5');
+    callExecFile('', ACP_HELP_OUTPUT);
     const { detectHeterogeneousCliCommand } = await importModule();
     expect(await detectHeterogeneousCliCommand('antigravity', 'agy')).toMatchObject({
       available: true,
       path: '/Users/x/.local/bin/agy',
-      version: '1.2.13-beta.1+build.5',
+      version: '1.5.10-beta.1+build.5',
     });
   });
 
-  it('rejects older agy versions that cannot stream input or resume', async () => {
-    callExecFile('1.0.7');
-    callExecFile('Usage: agy --print --output-format json');
+  it('rejects older agy versions that lack the ACP stdio server', async () => {
+    callExecFile('1.2.13');
+    callExecFile('Usage: agy --input-format --output-format stream-json --conversation');
     const { detectHeterogeneousCliCommand } = await importModule();
     expect(await detectHeterogeneousCliCommand('antigravity', '/tmp/old-agy')).toMatchObject({
       available: false,
@@ -96,8 +99,8 @@ describe('resolveCliCommand — Antigravity', () => {
     process.env = { ...process.env, PATH: '/usr/bin:/bin', SHELL: '' };
     try {
       callExecFileError(new Error('not found'));
-      callExecFile('1.2.13');
-      callExecFile('--input-format --output-format stream-json --conversation');
+      callExecFile('1.5.10');
+      callExecFile(ACP_HELP_OUTPUT);
       const { detectHeterogeneousCliCommand } = await importModule();
       expect(await detectHeterogeneousCliCommand('antigravity', 'agy')).toMatchObject({
         available: true,
@@ -120,8 +123,8 @@ describe('resolveCliCommand — Antigravity', () => {
       callExecFileError(new Error('not found'));
       callExecFileError(new Error('no registry PATH'));
       callExecFileError(new Error('no registry PATH'));
-      callExecFile('1.2.13');
-      callExecFile('--input-format --output-format stream-json --conversation');
+      callExecFile('1.5.10');
+      callExecFile(ACP_HELP_OUTPUT);
       const { detectHeterogeneousCliCommand } = await importModule();
       expect(await detectHeterogeneousCliCommand('antigravity', 'agy')).toMatchObject({
         available: true,

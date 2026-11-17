@@ -53,6 +53,16 @@ export {
 } from './agentStreamPipeline';
 export { ANTIGRAVITY_BASE_ARGS, buildAntigravityArgs } from './antigravity';
 export {
+  type AntigravityAcpImagePromptBlock,
+  type AntigravityAcpPromptBlock,
+  AntigravityAcpSession,
+  type AntigravityAcpSessionOptions,
+  type AntigravityAcpTextPromptBlock,
+  buildAntigravityAcpArgs,
+  buildAntigravityAcpPrompt,
+  isAntigravityAcpSessionNotFoundError,
+} from './antigravityAcpSession';
+export {
   classifyHeteroProcessFailure,
   type ClassifyHeteroProcessFailureParams,
   HETERO_WORKING_DIRECTORY_NOT_FOUND,
