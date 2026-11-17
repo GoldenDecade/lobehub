@@ -3,12 +3,22 @@ import { z } from 'zod';
 
 import { requireWorkspaceRoleWhenScoped } from '@/business/server/trpc-middlewares/workspaceAuth';
 import { AgentModel } from '@/database/models/agent';
+import { TopicModel } from '@/database/models/topic';
 import type { LobeChatDatabase } from '@/database/type';
 import { router } from '@/libs/trpc/lambda';
-import { deviceGateway, isValidDirectoryName } from '@/server/services/deviceGateway';
+import {
+  deviceGateway,
+  isPathWithinRoot,
+  isValidDirectoryName,
+} from '@/server/services/deviceGateway';
 
 import {
+  assertCanUseTopicTargets,
+  assertCanViewTopicTargets,
+} from '../_helpers/conversationResourceGuard';
+import {
   assertWorkspaceRootApproved,
+  findRegisteredWorkspaceRoot,
   registerDeviceMemoryRoot,
   registerDeviceSkillRoots,
 } from '../deviceWorkspaceGuard';
@@ -19,6 +29,8 @@ const workspaceFileInput = z.object({
   deviceId: z.string(),
   workingDirectory: z.string(),
 });
+
+const topicFileInput = workspaceFileInput.extend({ topicId: z.string().min(1).optional() });
 
 /**
  * `deviceProcedure` that additionally requires `workingDirectory` to be an
@@ -37,12 +49,63 @@ const workspaceFileProcedure = deviceProcedure.input(workspaceFileInput).use(asy
   return opts.next();
 });
 
+/** Use the persisted topic checkout when it isn't independently registered on the device. */
+const topicFileProcedure = deviceProcedure.input(topicFileInput).use(async (opts) => {
+  const { ctx } = opts;
+  const { deviceId, topicId, workingDirectory } = topicFileInput.parse(await opts.getRawInput());
+  try {
+    await assertWorkspaceRootApproved(ctx.deviceModel, deviceId, workingDirectory, ctx.workspaceId);
+  } catch (error) {
+    if (!topicId || !(error instanceof TRPCError) || error.code !== 'FORBIDDEN') throw error;
+
+    const { serverDB: db, userId, workspaceId } = ctx;
+    const topicModel = new TopicModel(db, userId, workspaceId);
+    const topic = await topicModel.findById(topicId);
+    const config = topic?.metadata?.workingDirectoryConfig;
+    const checkout = config?.git?.activeWorktree;
+    if (
+      !config ||
+      !checkout ||
+      topic?.metadata?.boundDeviceId !== deviceId ||
+      !isPathWithinRoot(checkout, workingDirectory) ||
+      !isPathWithinRoot(workingDirectory, checkout)
+    )
+      throw error;
+
+    const assertTopicAccess =
+      opts.type === 'query' ? assertCanViewTopicTargets : assertCanUseTopicTargets;
+    await assertTopicAccess(
+      {
+        db,
+        grantedPermissions: (ctx as { workspacePermissionCodes?: string[] })
+          .workspacePermissionCodes,
+        userId,
+        workspaceId,
+      },
+      [topicId],
+    );
+    const approvedRoot = await findRegisteredWorkspaceRoot(
+      ctx.deviceModel,
+      deviceId,
+      config.path,
+      workspaceId,
+    );
+    if (!approvedRoot) throw error;
+
+    return opts.next({
+      ctx: { worktree: { approvedRoot, sourcePath: config.path, worktreePath: workingDirectory } },
+    });
+  }
+
+  return opts.next({ ctx: { worktree: undefined } });
+});
+
 /**
- * `workspaceFileProcedure` for routes that change files on the device. In a
+ * `topicFileProcedure` for routes that change files on the device. In a
  * shared workspace a read-only viewer may browse the tree but not alter it, so
  * writes also need at least the `member` role; personal mode stays open.
  */
-const workspaceFileWriteProcedure = workspaceFileProcedure.use(
+const workspaceFileWriteProcedure = topicFileProcedure.use(
   requireWorkspaceRoleWhenScoped('member'),
 );
 
@@ -219,9 +282,9 @@ export const projectFilesRouter = router({
     }),
   /**
    * Read-only local file preview for a file on a remote device. The web client
-   * receives render data, not a `localfile://` URL; saving remains unsupported.
+   * receives the serialized preview directly.
    */
-  getLocalFilePreview: workspaceFileProcedure
+  getLocalFilePreview: topicFileProcedure
     .input(
       z.object({
         accept: z.enum(['image']).optional(),
@@ -236,6 +299,7 @@ export const projectFilesRouter = router({
         userId: ctx.userId,
         workspaceId: ctx.workspaceId,
         workingDirectory: input.workingDirectory,
+        ...(ctx.worktree && { worktree: ctx.worktree }),
       });
     }),
   copyAssetForPublish: workspacePublishProcedure
@@ -348,6 +412,7 @@ export const projectFilesRouter = router({
         userId: ctx.userId,
         workspaceId: ctx.workspaceId,
         workingDirectory: input.workingDirectory,
+        ...(ctx.worktree && { worktree: ctx.worktree }),
       });
     }),
   /**
@@ -369,6 +434,7 @@ export const projectFilesRouter = router({
         userId: ctx.userId,
         workspaceId: ctx.workspaceId,
         workingDirectory: input.workingDirectory,
+        ...(ctx.worktree && { worktree: ctx.worktree }),
       });
     }),
   /**
@@ -390,6 +456,7 @@ export const projectFilesRouter = router({
         userId: ctx.userId,
         workspaceId: ctx.workspaceId,
         workingDirectory: input.workingDirectory,
+        ...(ctx.worktree && { worktree: ctx.worktree }),
       });
     }),
   /**
@@ -411,6 +478,7 @@ export const projectFilesRouter = router({
         userId: ctx.userId,
         workspaceId: ctx.workspaceId,
         workingDirectory: input.workingDirectory,
+        ...(ctx.worktree && { worktree: ctx.worktree }),
       });
     }),
   /**
@@ -426,6 +494,7 @@ export const projectFilesRouter = router({
         userId: ctx.userId,
         workspaceId: ctx.workspaceId,
         workingDirectory: input.workingDirectory,
+        ...(ctx.worktree && { worktree: ctx.worktree }),
       });
     }),
   /**
@@ -447,6 +516,7 @@ export const projectFilesRouter = router({
         userId: ctx.userId,
         workspaceId: ctx.workspaceId,
         workingDirectory: input.workingDirectory,
+        ...(ctx.worktree && { worktree: ctx.worktree }),
       });
     }),
   /**
@@ -462,6 +532,7 @@ export const projectFilesRouter = router({
         userId: ctx.userId,
         workspaceId: ctx.workspaceId,
         workingDirectory: input.workingDirectory,
+        ...(ctx.worktree && { worktree: ctx.worktree }),
       });
     }),
   /**

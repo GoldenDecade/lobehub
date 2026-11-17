@@ -101,6 +101,7 @@ export type {
   MainResolveToolResultIntent,
   MainSetToolInterventionIntent,
   MainStreamContentIntent,
+  MainUpdateBackgroundTaskIntent,
   MainUpdateToolStateIntent,
   PersistAssistantIntent,
   SetErrorIntent,
@@ -172,6 +173,9 @@ export {
 export type {
   AgentEventAdapter,
   AgentProcessConfig,
+  BackgroundTaskEventData,
+  HeteroBackgroundTask,
+  HeteroBackgroundTaskStatus,
   HeterogeneousAgentEvent,
   HeterogeneousEventType,
   HeterogeneousTerminalErrorData,

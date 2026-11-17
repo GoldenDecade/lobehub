@@ -779,6 +779,8 @@ export type ProjectSkillSource =
 
 export interface ProjectSkillItem {
   description?: string;
+  /** SKILL.md declares that the model must not invoke this skill automatically. */
+  disableModelInvocation?: boolean;
   /** Total number of regular files under `skillDir` (recursive, including `SKILL.md`). */
   fileCount: number;
   /**

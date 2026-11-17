@@ -21,6 +21,28 @@ const ownedByScope = (scope: { userId: string; workspaceId?: string | null }) =>
     : and(eq(scmChangeRequests.userId, scope.userId), isNull(scmChangeRequests.workspaceId));
 
 /**
+ * What a scope may read: its own change requests, plus everything on the
+ * installations it connected (see {@link ScmChangeRequestModel.listByScope}).
+ */
+const visibleToScope = (
+  db: LobeChatDatabase,
+  scope: { userId: string; workspaceId?: string | null },
+) => {
+  const connected = db
+    .select({ id: scmInstallations.id })
+    .from(scmInstallations)
+    .where(
+      and(
+        isNull(scmInstallations.revokedAt),
+        scope.workspaceId
+          ? eq(scmInstallations.workspaceId, scope.workspaceId)
+          : and(eq(scmInstallations.userId, scope.userId), isNull(scmInstallations.workspaceId)),
+      ),
+    );
+  return or(ownedByScope(scope), inArray(scmChangeRequests.installationId, connected));
+};
+
+/**
  * Conclusions worth waking an agent over: something broke and there is
  * something to fix. A cancelled or stale run is not one of them — usually a
  * human superseded it — but it is not a pass either, which is why the two
@@ -229,27 +251,70 @@ export class ScmChangeRequestModel {
     db: LobeChatDatabase,
     scope: { userId: string; workspaceId?: string | null },
     options: { limit?: number } = {},
-  ): Promise<ScmChangeRequestItem[]> => {
-    const owned = ownedByScope(scope);
+  ): Promise<ScmChangeRequestItem[]> =>
+    db
+      .select()
+      .from(scmChangeRequests)
+      .where(visibleToScope(db, scope))
+      .orderBy(desc(scmChangeRequests.updatedAt))
+      .limit(options.limit ?? 50);
 
-    const connected = db
-      .select({ id: scmInstallations.id })
-      .from(scmInstallations)
-      .where(
-        and(
-          isNull(scmInstallations.revokedAt),
-          scope.workspaceId
-            ? eq(scmInstallations.workspaceId, scope.workspaceId)
-            : and(eq(scmInstallations.userId, scope.userId), isNull(scmInstallations.workspaceId)),
-        ),
-      );
+  /**
+   * The rows a scope can see for these `owner/repo#number` identities, matched
+   * case-insensitively (GitHub names are). Same visibility as
+   * {@link listByScope}; an identity no installation tracks has no row.
+   */
+  static listByIdentities = async (
+    db: LobeChatDatabase,
+    scope: { userId: string; workspaceId?: string | null },
+    identities: { number: number; repoFullName: string }[],
+  ): Promise<ScmChangeRequestItem[]> => {
+    if (identities.length === 0) return [];
 
     return db
       .select()
       .from(scmChangeRequests)
-      .where(or(owned, inArray(scmChangeRequests.installationId, connected)))
-      .orderBy(desc(scmChangeRequests.updatedAt))
-      .limit(options.limit ?? 50);
+      .where(
+        and(
+          eq(scmChangeRequests.provider, 'github'),
+          or(
+            ...identities.map(({ number, repoFullName }) =>
+              and(
+                eq(scmChangeRequests.number, number),
+                sql`lower(${scmChangeRequests.repoFullName}) = ${repoFullName.toLowerCase()}`,
+              ),
+            ),
+          ),
+          visibleToScope(db, scope),
+        ),
+      );
+  };
+
+  /**
+   * Open pull requests of `repoFullName` whose head is one of `branches`, as
+   * a scope can see them: what a `git push` to those branches updated.
+   */
+  static listOpenByHeadRefs = async (
+    db: LobeChatDatabase,
+    scope: { userId: string; workspaceId?: string | null },
+    repoFullName: string,
+    branches: string[],
+  ): Promise<ScmChangeRequestItem[]> => {
+    if (branches.length === 0) return [];
+
+    return db
+      .select()
+      .from(scmChangeRequests)
+      .where(
+        and(
+          eq(scmChangeRequests.provider, 'github'),
+          sql`lower(${scmChangeRequests.repoFullName}) = ${repoFullName.toLowerCase()}`,
+          inArray(scmChangeRequests.headRef, branches),
+          eq(scmChangeRequests.state, 'open'),
+          visibleToScope(db, scope),
+        ),
+      )
+      .orderBy(desc(scmChangeRequests.updatedAt));
   };
 
   /**
@@ -561,27 +626,84 @@ export class ScmChangeRequestModel {
       return row ?? null;
     });
 
-  /** Fill in links that are still null. Never overwrites a link already set. */
+  /**
+   * Fill in links that are still null. Never overwrites a link already set.
+   *
+   * The null check lives in the UPDATE itself (`COALESCE`), not in a read
+   * first: a concurrent `pull_request` ingest filling a link between a
+   * read-modify-write's two statements would otherwise be overwritten.
+   * `guard` narrows the same statement further (e.g. a scope fence); a row
+   * that fails it is untouched. Returns the row after the update, `null`
+   * when it does not exist or the guard refused it.
+   */
   static attachLinks = async (
     db: LobeChatDatabase,
     id: string,
     links: ScmChangeRequestLinks,
+    guard?: SQL,
   ): Promise<ScmChangeRequestItem | null> => {
-    const existing = await ScmChangeRequestModel.findById(db, id);
-    if (!existing) return null;
-
-    const set: Partial<ScmChangeRequestLinks> = {};
+    const set: Record<string, SQL> = {};
     for (const key of ['acceptanceId', 'installationId', 'taskId', 'topicId', 'workId'] as const) {
-      if (!existing[key] && links[key]) set[key] = links[key];
+      if (links[key]) {
+        set[key] = sql`coalesce(${scmChangeRequests[key]}, ${links[key]})`;
+      }
     }
-    if (Object.keys(set).length === 0) return existing;
+    if (Object.keys(set).length === 0) return ScmChangeRequestModel.findById(db, id);
 
     const [row] = await db
       .update(scmChangeRequests)
       .set({ ...set, updatedAt: new Date() })
-      .where(eq(scmChangeRequests.id, id))
+      .where(and(eq(scmChangeRequests.id, id), guard))
       .returning();
-    return row;
+    return row ?? null;
+  };
+
+  /**
+   * Backfill the row for a pull request a Work registration just tied to a
+   * conversation — but only when the row lives in the Work's own scope.
+   * Provider events re-resolve links on every `pull_request` delivery, so
+   * this covers the gap between the last delivery and the next: a review or
+   * a failing check in between would otherwise find no conversation to
+   * wake. Fill-only like the event path; a link already set is never
+   * replaced.
+   */
+  static attachPullRequestWork = async (
+    db: LobeChatDatabase,
+    params: {
+      number: number;
+      repoFullName: string;
+      scope: { userId: string; workspaceId?: string | null };
+      topicId?: string | null;
+      workId: string;
+    },
+  ): Promise<void> => {
+    const row = await ScmChangeRequestModel.findByIdentityIgnoringCase(
+      db,
+      'github',
+      params.repoFullName,
+      params.number,
+    );
+    if (!row) return;
+
+    // A row routed to another scope learns nothing: its `topicId` is looked
+    // up under the row's owner when a wake fires, so a foreign conversation
+    // would occupy a fill-only slot the right link can never take. The check
+    // rides inside the UPDATE — a row re-routed between our read and write
+    // is refused, not written.
+    await ScmChangeRequestModel.attachLinks(
+      db,
+      row.id,
+      {
+        topicId: params.topicId,
+        workId: params.workId,
+      },
+      and(
+        eq(scmChangeRequests.userId, params.scope.userId),
+        params.scope.workspaceId == null
+          ? isNull(scmChangeRequests.workspaceId)
+          : eq(scmChangeRequests.workspaceId, params.scope.workspaceId),
+      ),
+    );
   };
 
   /**
