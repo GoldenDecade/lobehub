@@ -1,4 +1,10 @@
+import { createRequire } from 'node:module';
+import path from 'node:path';
+
 import { defineConfig } from 'tsdown';
+
+const require = createRequire(import.meta.url);
+const zodDir = path.dirname(require.resolve('zod/package.json'));
 
 export default defineConfig({
   banner: { js: '#!/usr/bin/env node' },
@@ -33,6 +39,31 @@ export default defineConfig({
       }
 
       defaultHandler(level, log);
+    };
+
+    // Dedupe `zod` across the root and `apps/desktop` pnpm workspaces and keep
+    // its module initializers intact under `codeSplitting: false`. `zod@4.6+`
+    // declares narrow `sideEffects`, causing Rolldown to wrap `schemas.js` in
+    // `__esmMin` (via dynamic imports like `@modelcontextprotocol/client`) while
+    // eliding the initializer call at static call sites (`Class is not a constructor`).
+    options.resolve = {
+      ...options.resolve,
+      alias: {
+        ...(options.resolve?.alias as Record<string, string> | undefined),
+        zod: zodDir,
+      },
+    };
+    const existingTreeshake =
+      typeof options.treeshake === 'object' && options.treeshake !== null ? options.treeshake : {};
+    const existingModuleSideEffects = Array.isArray(existingTreeshake.moduleSideEffects)
+      ? existingTreeshake.moduleSideEffects
+      : [];
+    options.treeshake = {
+      ...existingTreeshake,
+      moduleSideEffects: [
+        ...existingModuleSideEffects,
+        { sideEffects: true, test: /[\\/]node_modules[\\/].*zod[\\/]/ },
+      ],
     };
 
     return options;

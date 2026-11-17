@@ -1,3 +1,6 @@
+import { existsSync } from 'node:fs';
+import path from 'node:path';
+
 import { describe, expect, it, vi } from 'vitest';
 
 import config from './tsdown.config';
@@ -55,5 +58,29 @@ describe('CLI build configuration', () => {
     onLog('warn', log, defaultHandler);
 
     expect(defaultHandler).toHaveBeenCalledWith('warn', log);
+  });
+
+  it('dedupes zod and preserves its module side effects under codeSplitting:false', async () => {
+    const options = await resolveInputOptions();
+
+    expect(typeof options.resolve?.alias?.zod).toBe('string');
+    expect(existsSync(path.join(options.resolve.alias.zod, 'package.json'))).toBe(true);
+    expect(options.treeshake?.moduleSideEffects).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          sideEffects: true,
+          test: expect.any(RegExp),
+        }),
+      ]),
+    );
+    const zodRule = options.treeshake.moduleSideEffects.find(
+      (rule: { sideEffects?: boolean; test?: RegExp }) =>
+        rule.sideEffects === true && rule.test instanceof RegExp,
+    );
+    expect(
+      zodRule.test.test(
+        '/repo/node_modules/.pnpm/zod@4.6.5/node_modules/zod/v4/classic/schemas.js',
+      ),
+    ).toBe(true);
   });
 });
