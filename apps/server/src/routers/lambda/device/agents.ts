@@ -154,6 +154,7 @@ export const agentsRouter = router({
         env: z.record(z.string(), z.string()).optional(),
         type: z.enum([
           'antigravity',
+          'claude-code',
           'codebuddy',
           'codex',
           'copilot',

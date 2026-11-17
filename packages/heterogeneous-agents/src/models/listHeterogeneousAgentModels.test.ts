@@ -6,12 +6,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const {
   detectDshCommandMock,
+  listClaudeCodeModelsMock,
   listCodexModelsMock,
   listDroidAcpModelsMock,
   listDshAcpModelsMock,
   listTraeAcpModelsMock,
 } = vi.hoisted(() => ({
   detectDshCommandMock: vi.fn(),
+  listClaudeCodeModelsMock: vi.fn(),
   listCodexModelsMock: vi.fn(),
   listDroidAcpModelsMock: vi.fn(),
   listDshAcpModelsMock: vi.fn(),
@@ -42,6 +44,7 @@ vi.mock('../spawn/dshAcpSession', () => ({
   listDshAcpModels: listDshAcpModelsMock,
 }));
 
+vi.mock('./claudeCode', () => ({ listClaudeCodeModels: listClaudeCodeModelsMock }));
 vi.mock('./codex', () => ({ listCodexModels: listCodexModelsMock }));
 
 // Catalog parsing uses a mocked process; directory failures exercise the real spawn separately.
@@ -896,6 +899,43 @@ describe('heterogeneous agent model discovery', () => {
         env: { FACTORY_API_KEY: 'test-key' },
       }),
     );
+    expect(execFileMock).not.toHaveBeenCalled();
+  });
+
+  it('discovers Claude Code modelPicker options from settings without spawning the CLI', async () => {
+    listClaudeCodeModelsMock.mockResolvedValue([
+      {
+        id: 'cursor/claude-opus-5-5@300k',
+        label: 'Claude Opus 5.5 @ 300k',
+        modelId: 'claude-opus-5-5@300k',
+        providerId: 'cursor',
+      },
+    ]);
+    const { listHeterogeneousAgentModels } = await importModule();
+
+    await expect(
+      listHeterogeneousAgentModels({
+        args: ['--setting-sources=user'],
+        cwd: '/repo',
+        env: { CLAUDE_CONFIG_DIR: '/custom/.claude' },
+        type: 'claude-code',
+      }),
+    ).resolves.toMatchObject({
+      models: [
+        {
+          id: 'cursor/claude-opus-5-5@300k',
+          label: 'Claude Opus 5.5 @ 300k',
+          modelId: 'claude-opus-5-5@300k',
+          providerId: 'cursor',
+        },
+      ],
+      status: 'success',
+    });
+    expect(listClaudeCodeModelsMock).toHaveBeenCalledWith({
+      args: ['--setting-sources=user'],
+      cwd: '/repo',
+      env: { CLAUDE_CONFIG_DIR: '/custom/.claude' },
+    });
     expect(execFileMock).not.toHaveBeenCalled();
   });
 });

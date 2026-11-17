@@ -20,11 +20,13 @@ describe('deviceRouter procedures', () => {
     expect(procedures[name]._def.middlewares).toHaveLength(middlewares);
   });
 
-  it('accepts Antigravity model discovery requests from connected devices', () => {
-    const input = { deviceId: 'device-agy', type: 'antigravity' };
+  it('accepts Antigravity and Claude Code model discovery requests from connected devices', () => {
     const schema = procedures.listHeterogeneousAgentModels._def.inputs.at(-1);
-    expect(schema.parse(input)).toEqual(input);
-    expect(schema.safeParse({ ...input, type: 'unknown-agent' }).success).toBe(false);
+    for (const type of ['antigravity', 'claude-code']) {
+      const input = { deviceId: 'device-1', type };
+      expect(schema.parse(input)).toEqual(input);
+    }
+    expect(schema.safeParse({ deviceId: 'device-1', type: 'unknown-agent' }).success).toBe(false);
   });
 });
 

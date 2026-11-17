@@ -130,6 +130,7 @@ export const buildSelectorView = ({
   t,
   topicPin,
   topicScoped = false,
+  useCatalogModel = false,
 }: {
   capability: HeteroSelectorCapability;
   models?: HeterogeneousAgentModel[];
@@ -140,6 +141,8 @@ export const buildSelectorView = ({
   topicPin?: HeterogeneousTopicPin;
   /** Whether a topic is active, so picks write to it instead of the Agent. */
   topicScoped?: boolean;
+  /** Promotes a static-default provider (e.g. Claude Code with `modelPicker.options`) to catalog mode. */
+  useCatalogModel?: boolean;
 }): SelectorView => {
   const model = capability.model?.resolve(provider) ?? HETEROGENEOUS_AGENT_DEFAULT_SELECTION;
   const effort = capability.effort?.resolve(provider);
@@ -148,11 +151,16 @@ export const buildSelectorView = ({
   const isFastSpeed = speed === 'fast' || speed === 'ultrafast';
 
   const defaultLabel = t('heteroAgent.modelSelector.default');
-  const modelLabel = getModelLabel(model, defaultLabel);
+  const catalogLabel =
+    model === HETEROGENEOUS_AGENT_DEFAULT_SELECTION
+      ? undefined
+      : models?.find((entry) => entry.id === model)?.label;
+  const modelLabel = catalogLabel || getModelLabel(model, defaultLabel);
   const effortLabelKeys = getEffortLabelKeys(provider.type);
   const effortLabel = effort ? t(effortLabelKeys[effort]) : undefined;
   const modeLabel = mode ? t(getModeLabelKey(mode)) : undefined;
-  const isCatalogModel = capability.model?.source === 'catalog';
+  const isCatalogModel =
+    capability.model?.source === 'catalog' || Boolean(useCatalogModel && models?.length);
   const isModeOnly =
     !!capability.mode && !capability.model && !capability.effort && !capability.speed;
 

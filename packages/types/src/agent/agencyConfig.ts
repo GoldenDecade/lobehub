@@ -54,7 +54,7 @@ export interface ListHeterogeneousAgentModelsParams {
   command?: string;
   cwd?: string;
   env?: Record<string, string>;
-  type: HeterogeneousCatalogAgentType;
+  type: HeterogeneousCatalogAgentType | 'claude-code';
 }
 
 export interface HeterogeneousAgentModelCatalogSuccess {

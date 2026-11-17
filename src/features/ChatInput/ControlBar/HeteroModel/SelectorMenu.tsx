@@ -39,17 +39,31 @@ const SelectorMenu = memo<SelectorMenuProps>(
   ({ agentId, capability, patch, permissionReason, provider, topicPin, topicScoped }) => {
     const { t } = useTranslation('chat');
     const [open, setOpen] = useState(false);
+    const supportsCatalog =
+      !!capability.speed ||
+      capability.model?.source === 'catalog' ||
+      provider.type === 'claude-code';
     const { data } = useTargetModelCatalog({
       agentId,
-      enabled: !!capability.speed,
+      enabled: supportsCatalog,
       open,
       type: provider.type as ListHeterogeneousAgentModelsParams['type'],
     });
     const models = data?.models;
+    const useCatalogModel = provider.type === 'claude-code' && Boolean(models?.length);
 
     const view = useMemo(
-      () => buildSelectorView({ capability, models, provider, t, topicPin, topicScoped }),
-      [capability, models, provider, t, topicPin, topicScoped],
+      () =>
+        buildSelectorView({
+          capability,
+          models,
+          provider,
+          t,
+          topicPin,
+          topicScoped,
+          useCatalogModel,
+        }),
+      [capability, models, provider, t, topicPin, topicScoped, useCatalogModel],
     );
 
     const select = useCallback(

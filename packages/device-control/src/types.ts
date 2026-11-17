@@ -498,6 +498,7 @@ export interface ListHeterogeneousAgentModelsParams {
   env?: Record<string, string>;
   type:
     | 'antigravity'
+    | 'claude-code'
     | 'codebuddy'
     | 'codex'
     | 'copilot'

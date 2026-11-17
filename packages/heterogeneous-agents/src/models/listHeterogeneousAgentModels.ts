@@ -21,6 +21,7 @@ import { resolveHeteroSpawnCommand } from '../spawn/resolveCliCommand';
 import { listTraeAcpModels } from '../spawn/traeAcpSession';
 import { resolveHeteroSpawnCwd } from '../spawn/workingDirectory';
 import { parseAntigravityModelCatalog } from './antigravity';
+import { listClaudeCodeModels } from './claudeCode';
 import { listCodexModels } from './codex';
 
 const execFilePromise = promisify(execFile);
@@ -358,6 +359,25 @@ export const listHeterogeneousAgentModels = async (
 ): Promise<HeterogeneousAgentModelCatalog> => {
   const updatedAt = Date.now();
   const callerEnv = params.env ?? process.env;
+
+  if (params.type === 'claude-code') {
+    try {
+      const models = await listClaudeCodeModels({
+        args: params.args,
+        cwd: params.cwd,
+        env: callerEnv as NodeJS.ProcessEnv,
+      });
+      return { models, status: 'success', updatedAt };
+    } catch (error) {
+      const code = classifyCatalogError(error);
+      return {
+        error: { code, message: getCatalogErrorMessage(code, params.type) },
+        status: 'error',
+        updatedAt,
+      };
+    }
+  }
+
   const resolved = await resolveCatalogCommand(params, callerEnv);
   const mergedPath = [
     ...new Set(

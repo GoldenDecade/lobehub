@@ -124,6 +124,34 @@ describe('dimensions per provider', () => {
     expect(dimensionKeys({ model: 'opus', type: 'claude-code' })).toEqual(['model', 'reasoning']);
   });
 
+  it('switches claude-code to the catalog submenu and uses modelPicker labels when configured', () => {
+    const view = buildSelectorView({
+      capability: selectorCapabilityOf('claude-code'),
+      models: [
+        {
+          id: 'cursor/claude-opus-5-5@300k',
+          label: 'Claude Opus 5.5 @ 300k',
+          modelId: 'claude-opus-5-5@300k',
+          providerId: 'cursor',
+        },
+      ],
+      provider: {
+        effort: 'high',
+        model: 'cursor/claude-opus-5-5@300k',
+        type: 'claude-code',
+      },
+      t,
+      useCatalogModel: true,
+    });
+
+    expect(view.isCatalogModel).toBe(true);
+    expect(view.dimensions.map((dimension) => dimension.key)).toEqual(['reasoning']);
+    expect(view.triggerLabel).toEqual({
+      secondaryText: 'heteroAgent.modelSelector.reasoning.high',
+      text: 'Claude Opus 5.5 @ 300k',
+    });
+  });
+
   it('keeps a Grok Build reasoning pick available and reflects it in the menu', () => {
     const provider: HeterogeneousProviderConfig = { model: 'grok-4.6', type: 'grok-build' };
     const updated = { ...provider, ...applyHeteroSelection(provider, { effort: 'xhigh' }) };
