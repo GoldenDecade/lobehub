@@ -1,13 +1,24 @@
 import { Flexbox } from '@lobehub/ui';
+import * as stylex from '@stylexjs/stylex';
 import { memo } from 'react';
 
 import { useEffectiveAgencyConfig } from '@/hooks/useEffectiveAgencyConfig';
 import { useEffectiveWorkingDirectory } from '@/hooks/useEffectiveWorkingDirectory';
 import { useAgentStore } from '@/store/agent';
 import { agentSelectors } from '@/store/agent/selectors';
+import { useDensityTokens } from '@/styles/density';
+import { sidebarRow } from '@/styles/density.stylex';
 
 import AgentDocumentsGroup, { type ResourceFilter } from './AgentDocumentsGroup';
 import SkillsGroup from './SkillsGroup';
+
+const styles = stylex.create({
+  pane: {
+    paddingBlockStart: sidebarRow.paneBlockStart,
+    paddingBlockEnd: sidebarRow.paneBlockEnd,
+    paddingInline: sidebarRow.paneInline,
+  },
+});
 
 interface ResourcesSectionProps {
   /** Bound remote device id (device mode); skills are then scanned over RPC. */
@@ -34,16 +45,16 @@ const ResourcesSection = memo<ResourcesSectionProps>(({ deviceId, enabled = true
   // device-bound agent resolved to `undefined` here and the skills fetch never
   // fired even though `deviceId` was set.
   const workingDirectory = useEffectiveWorkingDirectory(activeAgentId);
+  const { sectionGap } = useDensityTokens();
 
   return (
     <Flexbox
+      // The document tree owns its insets: its toolbar follows the pane toolbar
+      // and its rows sit inside pierre's own inline padding.
+      className={filter === 'documents' ? undefined : stylex.props(styles.pane).className}
       data-testid={`workspace-${filter}`}
       flex={1}
-      gap={16}
-      paddingBlock={8}
-      // The document tree's row fill spans the content edges, so it takes the
-      // header's 4px gutter: a selected row then lines up with the tabs above.
-      paddingInline={filter === 'documents' ? 4 : '8px 12px'}
+      gap={sectionGap}
       style={{ minHeight: 0 }}
     >
       {isHetero && workingDirectory && filter === 'skills' && (
@@ -55,6 +66,7 @@ const ResourcesSection = memo<ResourcesSectionProps>(({ deviceId, enabled = true
       )}
       {!isHetero && (
         <AgentDocumentsGroup
+          compact
           activeFilter={filter}
           deviceId={deviceId}
           enabled={enabled}

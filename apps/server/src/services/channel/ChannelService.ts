@@ -22,6 +22,7 @@ import type {
   ChannelStopScope,
 } from '@/database/repositories/channel';
 import { ChannelError, ChannelRepository } from '@/database/repositories/channel';
+import { findProjectMainChannelId } from '@/database/repositories/channel/projectMainChannel';
 import { users } from '@/database/schemas';
 import { AgentService } from '@/server/services/agent';
 import { deviceGateway } from '@/server/services/deviceGateway';
@@ -306,6 +307,24 @@ export class ChannelService {
   };
 
   /**
+   * Where a person lands opening an Agent from their contacts or Agent list. A project's main Agent
+   * talks in that project's Channel, so it opens there instead of a direct conversation beside it;
+   * a direct conversation the person already has with it still opens as it is.
+   */
+  openAgent = async (agentId: string): Promise<string | undefined> => {
+    const existing = await this.repository.findDirectAccess(agentId);
+    if (existing) return existing.channel.isDeleted ? undefined : existing.channel.id;
+    const projectChannelId = await findProjectMainChannelId(
+      this.db,
+      this.userId,
+      this.workspaceId ?? null,
+      agentId,
+    );
+    if (projectChannelId) return projectChannelId;
+    return (await this.createDirect(agentId))?.channel.id;
+  };
+
+  /**
    * The one-on-one conversation with a contact (personal space) or a fellow member (workspace).
    * The stored title is the other person's name for
    * whoever opened it; clients title it with whoever the viewer is talking to.
@@ -387,6 +406,13 @@ export class ChannelService {
     const message = await this.repository.editMessage(channelId, messageId, content);
     await this.changed(channelId);
     return message;
+  };
+
+  /** Replies the message asked for stop with it; the coordinator stops those still writing. */
+  deleteMessage = async (channelId: string, messageId: string) => {
+    const writers = await this.repository.deleteMessage(channelId, messageId);
+    await new ChannelCoordinator(this.db).stopWriters(writers);
+    await Promise.all([wakeChannel(channelId), this.changed(channelId)]);
   };
 
   addUser = async (channelId: string, userId: string) => {

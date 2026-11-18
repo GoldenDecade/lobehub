@@ -14,11 +14,16 @@ import {
   useProjectSkills,
 } from '@/features/SkillsList';
 
+import { useSelectSkill } from './useSelectSkill';
+
+const getSkillTagCategory = (item: SkillListItem) =>
+  isCliSlashSkillSource(item.source) ? 'cliSkill' : 'projectSkill';
+
 // CLI-native plugin skills serialize as `/name` (cliSkill chip); shared
 // filesystem skills stay projectSkill chips resolved by the runtime registry.
 const handleSkillDragStart = (item: SkillListItem, event: React.DragEvent) => {
   startSkillDrag(event, {
-    category: isCliSlashSkillSource(item.source) ? 'cliSkill' : 'projectSkill',
+    category: getSkillTagCategory(item),
     label: item.name,
     type: item.name,
   });
@@ -34,29 +39,24 @@ interface SkillsGroupProps {
 
 const SkillsGroup = memo<SkillsGroupProps>(({ agentType, deviceId, workingDirectory }) => {
   const { t } = useTranslation('chat');
+  const onSelectSkill = useSelectSkill(getSkillTagCategory);
   const [searchQuery, setSearchQuery] = useState('');
   // Local desktop reads over IPC; a bound device reads over RPC. Either path
   // makes the skills list reachable even when this client isn't the desktop.
   const enabled = (isDesktop || !!deviceId) && !!workingDirectory;
-  const {
-    deviceItems,
-    error,
-    getRowActions,
-    isLoading,
-    mutate,
-    onOpenFile,
-    onOpenSkill,
-    projectItems,
-  } = useProjectSkills(enabled ? workingDirectory : undefined, deviceId, agentType);
+  const { deviceItems, error, isLoading, mutate, projectItems } = useProjectSkills(
+    enabled ? workingDirectory : undefined,
+    deviceId,
+    agentType,
+  );
 
   if (!enabled) return null;
 
   const renderList = (items: typeof projectItems) => (
     <SkillsList
-      getRowActions={getRowActions}
+      compact
       items={items}
-      onOpenFile={onOpenFile}
-      onOpenSkill={onOpenSkill}
+      onSelectSkill={onSelectSkill}
       onSkillDragStart={handleSkillDragStart}
     />
   );
@@ -74,10 +74,11 @@ const SkillsGroup = memo<SkillsGroupProps>(({ agentType, deviceId, workingDirect
       <>
         <SkillsSearchBar onSearch={setSearchQuery} />
         {!hasMatchedProject && !hasMatchedDevice && (
-          <SkillSection isEmpty emptyText={t('workingPanel.skills.noSearchResults')} />
+          <SkillSection compact isEmpty emptyText={t('workingPanel.skills.noSearchResults')} />
         )}
         {hasMatchedProject && (
           <SkillSection
+            compact
             sectionHeader={{
               collapsible: false,
               count: matchedProjectItems.length,
@@ -89,6 +90,7 @@ const SkillsGroup = memo<SkillsGroupProps>(({ agentType, deviceId, workingDirect
         )}
         {hasMatchedDevice && (
           <SkillSection
+            compact
             sectionHeader={{
               collapsible: false,
               count: matchedDeviceItems.length,
@@ -104,6 +106,7 @@ const SkillsGroup = memo<SkillsGroupProps>(({ agentType, deviceId, workingDirect
 
   return (
     <SkillSection
+      compact
       isEmpty
       emptyText={t('workingPanel.skills.empty')}
       error={error}

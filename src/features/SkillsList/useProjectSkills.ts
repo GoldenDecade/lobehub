@@ -1,31 +1,21 @@
 import type { ListProjectSkillsResult, ProjectSkillItem } from '@lobechat/electron-client-ipc';
-import { EyeIcon, PencilIcon, Trash2Icon } from 'lucide-react';
-import path from 'pathe';
 import { useCallback, useMemo } from 'react';
-import { useTranslation } from 'react-i18next';
 
 import { useChatStore } from '@/store/chat';
 import { useToolStore } from '@/store/tool';
 import { projectSkillsSelectors } from '@/store/tool/selectors';
 
-import type { SkillListItem, SkillRowAction } from './SkillsList';
+import type { SkillListItem } from './SkillsList';
 
 export interface UseProjectSkillsResult {
   deviceItems: SkillListItem[];
   /** The thrown error from the latest scan, if it failed. */
   error: unknown;
-  /**
-   * Per-row actions for filesystem skills: "view" opens the SKILL.md (locally
-   * via IPC, or on a bound device over RPC — same as the Files tab), while
-   * rename / delete are stubbed (disabled) until filesystem-mutation IPC lands.
-   */
-  getRowActions: (item: SkillListItem) => SkillRowAction[];
   /** No scan (persisted or fresh) for this device + directory yet. */
   isLoading: boolean;
   items: SkillListItem[];
   /** Retry the failed scan. */
   mutate: () => void;
-  onOpenFile: (item: SkillListItem, relativePath: string) => void;
   onOpenSkill: (item: SkillListItem) => void;
   projectItems: SkillListItem[];
   raw: ListProjectSkillsResult | undefined;
@@ -51,7 +41,6 @@ export const useProjectSkills = (
   deviceId?: string,
   agentType?: string,
 ): UseProjectSkillsResult => {
-  const { t } = useTranslation('chat');
   const openLocalFile = useChatStore((s) => s.openLocalFile);
 
   const { error, revalidate } = useToolStore((s) => s.useFetchProjectSkills)(
@@ -75,8 +64,6 @@ export const useProjectSkills = (
     () =>
       (data?.skills ?? []).map((skill) => ({
         description: skill.description,
-        disableModelInvocation: skill.disableModelInvocation,
-        fileCount: skill.fileCount,
         files: skill.files,
         id: skill.skillDir,
         name: skill.name,
@@ -120,15 +107,6 @@ export const useProjectSkills = (
     [deviceId, openLocalFile, previewRoot],
   );
 
-  const onOpenFile = useCallback(
-    (item: SkillListItem, relativePath: string) => {
-      const skill = skillByDir.get(item.id);
-      if (!skill || !skill.path) return;
-      openSkillFile(skill, path.join(skill.skillDir, relativePath));
-    },
-    [openSkillFile, skillByDir],
-  );
-
   const onOpenSkill = useCallback(
     (item: SkillListItem) => {
       const skill = skillByDir.get(item.id);
@@ -138,48 +116,6 @@ export const useProjectSkills = (
     [openSkillFile, skillByDir],
   );
 
-  const getRowActions = useCallback(
-    (item: SkillListItem): SkillRowAction[] => {
-      // Binary-compiled built-in skills (`claude-code-builtin`) have no SKILL.md on disk.
-      const skill = skillByDir.get(item.id);
-      if (!skill?.path) return [];
-
-      const comingSoon = t('workingPanel.skills.actions.comingSoon');
-      return [
-        {
-          // Preview works in every mode: local via IPC, bound device via RPC
-          // (matches the Files tab, which reads remote files over RPC).
-          icon: EyeIcon,
-          key: 'view',
-          label: t('workingPanel.skills.actions.view'),
-          onClick: onOpenSkill,
-          sfSymbol: 'eye',
-        },
-        {
-          // Renaming a filesystem skill needs an IPC/RPC that doesn't exist yet.
-          disabled: true,
-          icon: PencilIcon,
-          key: 'rename',
-          label: t('workingPanel.skills.actions.rename'),
-          onClick: () => {},
-          sfSymbol: 'pencil',
-          tooltip: comingSoon,
-        },
-        {
-          danger: true,
-          disabled: true,
-          icon: Trash2Icon,
-          key: 'delete',
-          label: t('workingPanel.skills.actions.delete'),
-          onClick: () => {},
-          sfSymbol: 'trash',
-          tooltip: comingSoon,
-        },
-      ];
-    },
-    [onOpenSkill, skillByDir, t],
-  );
-
   const retry = useCallback(() => {
     void revalidate();
   }, [revalidate]);
@@ -187,11 +123,9 @@ export const useProjectSkills = (
   return {
     deviceItems,
     error,
-    getRowActions,
     isLoading,
     items,
     mutate: retry,
-    onOpenFile,
     onOpenSkill,
     projectItems,
     raw: data,

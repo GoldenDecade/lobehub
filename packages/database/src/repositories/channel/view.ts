@@ -1,4 +1,9 @@
-import { channelMessageEditedAt, channelMessageReceipt, channelMessageVia } from '@lobechat/types';
+import {
+  channelMessageDeletedAt,
+  channelMessageEditedAt,
+  channelMessageReceipt,
+  channelMessageVia,
+} from '@lobechat/types';
 import {
   and,
   asc,
@@ -9,6 +14,7 @@ import {
   inArray,
   isNotNull,
   isNull,
+  like,
   lt,
   or,
   type SQL,
@@ -36,7 +42,7 @@ import { activeMembers } from './delivery';
 import { ChannelError } from './error';
 import { externalWorksByMessage } from './works';
 
-const publicMessageColumns = {
+export const publicMessageColumns = {
   ...getTableColumns(channelMessages),
   senderAgentAvatar: agents.avatar,
   senderAgentName: agents.name,
@@ -55,7 +61,7 @@ type MessageRow = typeof channelMessages.$inferSelect & {
   senderUsername: string | null;
 };
 
-const publicMessage = (row: MessageRow, fileIds: string[]) => {
+export const publicMessage = (row: MessageRow, fileIds: string[]) => {
   const {
     senderAgentAvatar,
     senderAgentName,
@@ -75,6 +81,7 @@ const publicMessage = (row: MessageRow, fileIds: string[]) => {
       name: isAgent ? senderAgentName || senderAgentTitle : senderUserName || senderUsername,
       type: isAgent ? ('agent' as const) : ('user' as const),
     },
+    deletedAt: channelMessageDeletedAt(message.metadata),
     editedAt: channelMessageEditedAt(message.metadata),
     // On an Agent's message, the exchange between Agents it reports from.
     receipt: (() => {
@@ -172,7 +179,20 @@ const sourceTopicsByMessage = async (
 
 const THREAD_PREVIEW_LENGTH = 240;
 
+/**
+ * Request keys of the acknowledgements an Agent posts before its run (`openingRequestKey` in
+ * `./opening`, which imports this module, so the prefix is repeated here).
+ */
+const OPENING_REQUEST_KEY_PATTERN = 'opening:%';
+
+/** An Agent's acknowledgement before its run: it says the work started, not what came of it. */
+const isOpeningAck = and(
+  eq(channelMessages.routingStatus, 'reply'),
+  like(channelMessages.requestKey, OPENING_REQUEST_KEY_PATTERN),
+);
+
 type ThreadSummary = {
+  lastNewsAt: Date | null;
   lastReply: Pick<ReturnType<typeof publicMessage>, 'author' | 'content' | 'createdAt' | 'id'>;
   replyCount: number;
 };
@@ -186,7 +206,14 @@ const threadSummaries = async (tx: Transaction, channelId: string, threadIds: st
   );
   const [counts, latest] = await Promise.all([
     tx
-      .select({ replyCount: count(), threadId: channelMessages.threadId })
+      .select({
+        lastNewsAt:
+          sql<Date | null>`max(${channelMessages.createdAt}) filter (where not (${isOpeningAck}))`.mapWith(
+            channelMessages.createdAt,
+          ),
+        replyCount: count(),
+        threadId: channelMessages.threadId,
+      })
       .from(channelMessages)
       .where(scope)
       .groupBy(channelMessages.threadId),
@@ -198,15 +225,16 @@ const threadSummaries = async (tx: Transaction, channelId: string, threadIds: st
       .where(scope)
       .orderBy(asc(channelMessages.threadId), desc(channelMessages.sequence)),
   ]);
-  const replyCounts = new Map(counts.map((row) => [row.threadId, row.replyCount]));
+  const countsByThread = new Map(counts.map((row) => [row.threadId, row]));
   return new Map<string, ThreadSummary>(
     latest.map((row) => {
       const { author, content, createdAt, id } = publicMessage(row, []);
       return [
         row.threadId!,
         {
+          lastNewsAt: countsByThread.get(row.threadId)?.lastNewsAt ?? null,
           lastReply: { author, content: content.slice(0, THREAD_PREVIEW_LENGTH), createdAt, id },
-          replyCount: replyCounts.get(row.threadId) ?? 0,
+          replyCount: countsByThread.get(row.threadId)?.replyCount ?? 0,
         },
       ];
     }),
@@ -348,6 +376,7 @@ export const readChannelView = async (
           string | null
         >`coalesce(nullif(${channelMembers.description}, ''), ${agents.description})`,
         id: channelMembers.id,
+        invitedBy: sql<string | null>`${channelMembers.metadata}->>'invitedBy'`,
         muted: sql<boolean>`coalesce((${channelMembers.config}->>'muted')::boolean, false)`,
         name: channelMembers.name,
         role: channelMembers.role,
@@ -460,8 +489,11 @@ export const readChannelView = async (
     : [];
   const quotes = new Map(
     quoted.map((row) => {
-      const { author, content, id, sequence, threadId } = publicMessage(row, []);
-      return [id, { author, content: content.slice(0, 240), id, sequence, threadId }] as const;
+      const { author, content, deletedAt, id, sequence, threadId } = publicMessage(row, []);
+      return [
+        id,
+        { author, content: content.slice(0, 240), deletedAt, id, sequence, threadId },
+      ] as const;
     }),
   );
   const files = await fileIdsByMessage(tx, [
@@ -509,6 +541,7 @@ export const readChannelView = async (
       return summarized.includes(entry.id)
         ? {
             ...named,
+            lastNewsAt: summaries.get(entry.id)?.lastNewsAt ?? null,
             lastReply: summaries.get(entry.id)?.lastReply ?? null,
             replyCount: summaries.get(entry.id)?.replyCount ?? 0,
           }

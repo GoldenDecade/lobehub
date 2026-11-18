@@ -245,9 +245,15 @@ export const contextEngineering = async ({
   let toolDiscoveryConfig: ToolDiscoveryConfig | undefined;
   if (isLobeToolsEnabled) {
     const toolState = getToolStoreState();
+    // Disabled tools and connectors the agent has off are in neither set: the
+    // engine dropped their manifests, so listing them would only invite an
+    // activation that cannot succeed.
+    const disabledIdSet = new Set(disabledPluginIds ?? []);
     const availableTools = toolSelectors
       .availableToolsForDiscovery(toolState)
-      .filter((tool) => !enabledToolSet.has(tool.identifier));
+      .filter(
+        (tool) => !enabledToolSet.has(tool.identifier) && !disabledIdSet.has(tool.identifier),
+      );
 
     if (availableTools.length > 0) {
       toolDiscoveryConfig = { availableTools };
@@ -282,6 +288,7 @@ export const contextEngineering = async ({
       },
       agentId,
       disabledPluginIds,
+      discoverableTools: toolDiscoveryConfig?.availableTools,
       // The Profile panel edits `activeAgentId` / `activeGroupId`, not the
       // builder agent that is answering.
       editingAgentId: tools?.includes(AgentBuilderIdentifier)
@@ -299,9 +306,7 @@ export const contextEngineering = async ({
     createBrowserContextFactProviders({ agentId, groupId, shareVisitor }),
   );
 
-  // Resolve enabled skills (await: pinned DB skills fetch their content on demand).
-  // In auto mode: expose all installed skills so the AI can discover and activate them.
-  // In manual mode: only expose user-selected skills (filtered by pluginIds).
+  // Profile skill choices contribute discovery metadata only.
   let enabledSkills: OperationSkillSet['skills'] | undefined;
   if (plugins) {
     // Manual mode narrows the pool itself, so an unselected skill is neither
