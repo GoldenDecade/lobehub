@@ -1,5 +1,8 @@
 import { execFile, spawn } from 'node:child_process';
 import { realpathSync } from 'node:fs';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
 
 import { pickTrimmedString, toRecord } from '@lobechat/utils/object';
 import type { Command } from 'commander';
@@ -167,6 +170,29 @@ export async function fetchLatestVersion(name: string, tag: string): Promise<str
   return release.version;
 }
 
+async function downloadTarballToTemp(
+  url: string,
+): Promise<{ cleanup: () => Promise<void>; filePath: string }> {
+  const res = await fetch(url);
+  if (!res.ok) {
+    throw new Error(`failed to download CLI tarball (${res.status}) from ${url}`);
+  }
+
+  const tmpDir = await mkdtemp(path.join(os.tmpdir(), 'lobehub-cli-update-'));
+  const filePath = path.join(tmpDir, 'lobehub-cli-wq.tgz');
+  const bytes = Buffer.from(await res.arrayBuffer());
+  await writeFile(filePath, bytes);
+
+  return {
+    cleanup: async () => {
+      await rm(tmpDir, { force: true, recursive: true }).catch((error) => {
+        log.debug(`Temp tarball cleanup failed: ${(error as Error).message}`);
+      });
+    },
+    filePath,
+  };
+}
+
 function runInstall(command: string, args: string[]): Promise<void> {
   return new Promise((resolve, reject) => {
     const child = spawn(command, args, {
@@ -272,17 +298,34 @@ export function registerUpdateCommand(program: Command) {
       }
 
       const pm = options.packageManager || detectPackageManager();
-      const { args, command } = buildInstallCommand(pm, installSpec);
-
-      log.info(`Upgrading via ${pc.bold(pm)}: ${pc.dim([command, ...args].join(' '))}`);
+      let tempDownload: { cleanup: () => Promise<void>; filePath: string } | undefined;
+      let targetSpec = installSpec;
 
       try {
+        if (/^https?:\/\//i.test(installSpec)) {
+          log.info(`Downloading release archive: ${pc.dim(installSpec)}`);
+          tempDownload = await downloadTarballToTemp(installSpec);
+          targetSpec = tempDownload.filePath;
+        }
+
+        const { args, command } = buildInstallCommand(pm, targetSpec);
+        log.info(`Upgrading via ${pc.bold(pm)}: ${pc.dim([command, ...args].join(' '))}`);
+
         await runInstall(command, args);
       } catch (error) {
         log.error(`Update failed: ${(error as Error).message}`);
-        log.error(`You can upgrade manually: ${[command, ...args].join(' ')}`);
+        if (/^https?:\/\//i.test(installSpec)) {
+          log.error(
+            `You can upgrade manually: curl -fsSL "${installSpec}" -o /tmp/lobehub-cli-wq.tgz && ${buildInstallCommand(pm, '/tmp/lobehub-cli-wq.tgz').command} ${buildInstallCommand(pm, '/tmp/lobehub-cli-wq.tgz').args.join(' ')}`,
+          );
+        } else {
+          const manual = buildInstallCommand(pm, installSpec);
+          log.error(`You can upgrade manually: ${[manual.command, ...manual.args].join(' ')}`);
+        }
         process.exit(1);
         return;
+      } finally {
+        await tempDownload?.cleanup();
       }
       log.info(pc.green(`CLI installation updated: ${current} → ${latest}.`));
       log.info(

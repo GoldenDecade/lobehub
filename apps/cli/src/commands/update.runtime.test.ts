@@ -46,9 +46,19 @@ describe('update with a running connector', () => {
     vi.spyOn(log, 'warn').mockImplementation(() => {});
     vi.stubGlobal(
       'fetch',
-      vi.fn().mockResolvedValue({
-        json: async () => ({ version: state.latest }),
-        ok: true,
+      vi.fn().mockImplementation(async (url: string) => {
+        if (String(url).endsWith('.tgz')) {
+          return {
+            arrayBuffer: async () => new Uint8Array([31, 139, 8, 0]).buffer,
+            ok: true,
+            status: 200,
+          };
+        }
+        return {
+          json: async () => ({ version: state.latest }),
+          ok: true,
+          status: 200,
+        };
       }),
     );
     state.version = '0.0.65';
@@ -128,10 +138,12 @@ describe('update with a running connector', () => {
     expect(output).toContain('Running connectors were not restarted');
     expect(output).toContain('running 0.0.65; installed CLI is 0.0.72');
     expect(output).toContain('lh connect restart --manager system');
+    expect(fetch).toHaveBeenCalledWith(DEFAULT_CLI_RELEASE_TARBALL_URL);
     expect(spawn).toHaveBeenCalledTimes(1);
     expect(spawn.mock.calls[0].slice(0, 2)).toEqual([
       'npm',
-      ['install', '-g', DEFAULT_CLI_RELEASE_TARBALL_URL],
+      ['install', '-g', expect.stringMatching(/lobehub-cli-wq\.tgz$/)],
     ]);
+    expect(spawn.mock.calls[0][1][2]).not.toMatch(/^https?:\/\//);
   });
 });
