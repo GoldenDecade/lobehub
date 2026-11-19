@@ -3,8 +3,18 @@ import { EventEmitter } from 'node:events';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import {
+  DEFAULT_CLI_RELEASE_MANIFEST_URL,
+  DEFAULT_CLI_RELEASE_TARBALL_URL,
+} from '../constants/urls';
 import { printConnectStatus } from './connectStatus';
-import { buildInstallCommand, isNewerVersion, reportInstalledConnectStatus } from './update';
+import {
+  applyGithubMirror,
+  buildInstallCommand,
+  fetchLatestRelease,
+  isNewerVersion,
+  reportInstalledConnectStatus,
+} from './update';
 
 const { execFile, spawn } = vi.hoisted(() => ({ execFile: vi.fn(), spawn: vi.fn() }));
 vi.mock('node:child_process', async (original) => ({
@@ -44,6 +54,90 @@ describe('isNewerVersion', () => {
 
   it('returns false for an unparseable latest version', () => {
     expect(isNewerVersion('not-a-version', '1.0.0')).toBe(false);
+  });
+
+  it('orders wq commit-timestamp builds chronologically across any base version', () => {
+    expect(isNewerVersion('2.3.4-wq.1795100000', '0.0.78')).toBe(true);
+    expect(isNewerVersion('2.3.4-wq.1795100100', '2.3.4-wq.1795100000')).toBe(true);
+    expect(isNewerVersion('2.3.4-wq.1795100000', '2.3.4-wq.1795100000')).toBe(false);
+    expect(isNewerVersion('2.3.5-wq.1795100000', '2.3.4-wq.1795999999')).toBe(true);
+  });
+});
+
+describe('fetchLatestRelease (private wq distribution)', () => {
+  const originalMirror = process.env.LOBEHUB_GITHUB_MIRROR;
+  const originalManifestUrl = process.env.LOBEHUB_CLI_RELEASE_MANIFEST_URL;
+
+  afterEach(() => {
+    if (originalMirror === undefined) delete process.env.LOBEHUB_GITHUB_MIRROR;
+    else process.env.LOBEHUB_GITHUB_MIRROR = originalMirror;
+    if (originalManifestUrl === undefined) delete process.env.LOBEHUB_CLI_RELEASE_MANIFEST_URL;
+    else process.env.LOBEHUB_CLI_RELEASE_MANIFEST_URL = originalManifestUrl;
+    vi.unstubAllGlobals();
+  });
+
+  it('fetches from the private GitHub Release manifest instead of public npm', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      json: async () => ({
+        tarballUrl:
+          'https://github.com/GoldenDecade/lobehub/releases/download/wq-cli/lobehub-cli-wq.tgz',
+        version: '2.3.4-wq.1795100000',
+      }),
+      ok: true,
+      status: 200,
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const release = await fetchLatestRelease('@lobehub/cli', 'latest');
+
+    expect(fetchMock).toHaveBeenCalledWith(DEFAULT_CLI_RELEASE_MANIFEST_URL, {
+      headers: { accept: 'application/json' },
+    });
+    expect(release).toEqual({
+      installSpec: DEFAULT_CLI_RELEASE_TARBALL_URL,
+      version: '2.3.4-wq.1795100000',
+    });
+  });
+
+  it('applies LOBEHUB_GITHUB_MIRROR to both manifest and tarball URLs', async () => {
+    process.env.LOBEHUB_GITHUB_MIRROR = 'https://ghfast.top/';
+    const fetchMock = vi.fn().mockResolvedValue({
+      json: async () => ({ version: '2.3.4-wq.1795100500' }),
+      ok: true,
+      status: 200,
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    expect(applyGithubMirror('https://github.com/example/file.tgz')).toBe(
+      'https://ghfast.top/https://github.com/example/file.tgz',
+    );
+
+    const release = await fetchLatestRelease('@lobehub/cli', 'latest');
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      `https://ghfast.top/${DEFAULT_CLI_RELEASE_MANIFEST_URL}`,
+      {
+        headers: { accept: 'application/json' },
+      },
+    );
+    expect(release).toEqual({
+      installSpec: `https://ghfast.top/${DEFAULT_CLI_RELEASE_TARBALL_URL}`,
+      version: '2.3.4-wq.1795100500',
+    });
+  });
+
+  it('reports a clear message before the first wq-cli release is published', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 404,
+      }),
+    );
+
+    await expect(fetchLatestRelease('@lobehub/cli', 'latest')).rejects.toThrow(
+      'GoldenDecade/lobehub@wq-cli',
+    );
   });
 });
 

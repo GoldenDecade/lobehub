@@ -4,6 +4,7 @@ import { EventEmitter } from 'node:events';
 import { Command } from 'commander';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { DEFAULT_CLI_RELEASE_TARBALL_URL } from '../constants/urls';
 import { log } from '../utils/logger';
 import { registerUpdateCommand } from './update';
 
@@ -130,7 +131,7 @@ describe('update with a running connector', () => {
     expect(spawn).toHaveBeenCalledTimes(1);
     expect(spawn.mock.calls[0].slice(0, 2)).toEqual([
       'npm',
-      ['install', '-g', '@lobehub/cli@0.0.72'],
+      ['install', '-g', DEFAULT_CLI_RELEASE_TARBALL_URL],
     ]);
   });
 });

@@ -9,6 +9,7 @@ import { xSync } from 'tinyexec';
 import { credentialsPath } from '../../auth/source';
 import { detectPackageManager, fetchLatestVersion, isNewerVersion } from '../../commands/update';
 import { resolveCliDirName } from '../../constants/identity';
+import { IS_PRIVATE_CLI_DISTRIBUTION } from '../../constants/urls';
 import { cliNodeEngine, cliPackageName, cliVersion } from '../../pkg';
 import type { CheckOutcome, DoctorCheck } from '../types';
 
@@ -331,6 +332,7 @@ const cliUpToDate: DoctorCheck = {
   network: true,
   profiles: ['core'],
   run: async (ctx): Promise<CheckOutcome> => {
+    const releaseSource = IS_PRIVATE_CLI_DISTRIBUTION ? 'the CLI release feed' : 'the npm registry';
     let latest: string;
     try {
       // Bound the request here rather than letting the runner's timeout fire:
@@ -344,7 +346,7 @@ const cliUpToDate: DoctorCheck = {
             timer = setTimeout(
               () =>
                 reject(
-                  new Error(`the npm registry did not answer within ${ctx.options.timeoutMs}ms`),
+                  new Error(`${releaseSource} did not answer within ${ctx.options.timeoutMs}ms`),
                 ),
               ctx.options.timeoutMs,
             );
@@ -355,7 +357,7 @@ const cliUpToDate: DoctorCheck = {
       }
     } catch (error) {
       return {
-        detail: `Could not reach the npm registry: ${error instanceof Error ? error.message : String(error)}.`,
+        detail: `Could not reach ${releaseSource}: ${error instanceof Error ? error.message : String(error)}.`,
         fix: 'Only affects the update check; ignore it on an air-gapped machine.',
         status: 'warn',
       };

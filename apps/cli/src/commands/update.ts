@@ -1,11 +1,19 @@
 import { execFile, spawn } from 'node:child_process';
 import { realpathSync } from 'node:fs';
 
+import { pickTrimmedString, toRecord } from '@lobechat/utils/object';
 import type { Command } from 'commander';
 import pc from 'picocolors';
 import semver from 'semver';
 
 import { CLI_DISPLAY_NAME } from '../constants/identity';
+import {
+  DEFAULT_CLI_RELEASE_MANIFEST_URL,
+  DEFAULT_CLI_RELEASE_REPO,
+  DEFAULT_CLI_RELEASE_TAG,
+  DEFAULT_CLI_RELEASE_TARBALL_URL,
+  IS_PRIVATE_CLI_DISTRIBUTION,
+} from '../constants/urls';
 // Pull package metadata from the shared `src/pkg.ts` module (resolved at the
 // bundled entry's depth) rather than a local `require('../../package.json')`,
 // which would point outside the package once bundled into dist/index.js.
@@ -86,8 +94,57 @@ export function isNewerVersion(latest: string, current: string): boolean {
   return semver.gt(latestParsed, currentParsed);
 }
 
-/** Published version behind an npm dist-tag. Also used by `lh doctor`. */
-export async function fetchLatestVersion(name: string, tag: string): Promise<string> {
+export interface LatestReleaseInfo {
+  installSpec: string;
+  version: string;
+}
+
+export function applyGithubMirror(url: string): string {
+  const mirror = process.env.LOBEHUB_GITHUB_MIRROR?.trim().replace(/\/+$/, '');
+  if (!mirror || !url.startsWith('https://github.com/')) return url;
+  return `${mirror}/${url}`;
+}
+
+export function resolvePrivateReleaseManifestUrl(): string {
+  const custom = process.env.LOBEHUB_CLI_RELEASE_MANIFEST_URL?.trim();
+  return custom || applyGithubMirror(DEFAULT_CLI_RELEASE_MANIFEST_URL);
+}
+
+/**
+ * Resolve the latest release version and install target.
+ *
+ * When built as a private distribution (`IS_PRIVATE_CLI_DISTRIBUTION`),
+ * reads the rolling GitHub Release manifest (`wq-cli/latest.json`) instead of public
+ * npm so `lh update` works across any machine without overwriting private defaults.
+ */
+export async function fetchLatestRelease(name: string, tag: string): Promise<LatestReleaseInfo> {
+  if (IS_PRIVATE_CLI_DISTRIBUTION) {
+    const manifestUrl = resolvePrivateReleaseManifestUrl();
+    const res = await fetch(manifestUrl, { headers: { accept: 'application/json' } });
+
+    if (res.status === 404) {
+      throw new Error(
+        `private CLI release (${DEFAULT_CLI_RELEASE_REPO}@${DEFAULT_CLI_RELEASE_TAG}) has not been published yet`,
+      );
+    }
+
+    if (!res.ok) {
+      throw new Error(`CLI release feed returned status ${res.status}`);
+    }
+
+    const data = toRecord(await res.json());
+    const version = pickTrimmedString(data?.version);
+    if (!version) {
+      throw new Error('CLI release manifest is missing the "version" field');
+    }
+
+    const tarballUrl = applyGithubMirror(
+      pickTrimmedString(data?.tarballUrl) ?? DEFAULT_CLI_RELEASE_TARBALL_URL,
+    );
+
+    return { installSpec: tarballUrl, version };
+  }
+
   const url = `https://registry.npmjs.org/${name}/${encodeURIComponent(tag)}`;
   const res = await fetch(url, { headers: { accept: 'application/json' } });
 
@@ -95,12 +152,19 @@ export async function fetchLatestVersion(name: string, tag: string): Promise<str
     throw new Error(`npm registry returned status ${res.status} for tag "${tag}"`);
   }
 
-  const data = (await res.json()) as { version?: string };
-  if (!data.version) {
+  const data = toRecord(await res.json());
+  const version = pickTrimmedString(data?.version);
+  if (!version) {
     throw new Error('npm registry response is missing the "version" field');
   }
 
-  return data.version;
+  return { installSpec: `${name}@${version}`, version };
+}
+
+/** Published version behind the active release feed. Also used by `lh doctor`. */
+export async function fetchLatestVersion(name: string, tag: string): Promise<string> {
+  const release = await fetchLatestRelease(name, tag);
+  return release.version;
 }
 
 function runInstall(command: string, args: string[]): Promise<void> {
@@ -179,16 +243,19 @@ export function registerUpdateCommand(program: Command) {
 
       log.info(`Current version: ${pc.bold(current)}`);
 
-      let latest: string;
+      let latestRelease: LatestReleaseInfo;
       try {
-        latest = await fetchLatestVersion(cliPackageName, tag);
+        latestRelease = await fetchLatestRelease(cliPackageName, tag);
       } catch (error) {
         log.error(`Unable to check for updates: ${(error as Error).message}`);
         process.exit(1);
         return;
       }
 
-      log.info(`Latest version:  ${pc.bold(latest)} ${pc.dim(`(${tag})`)}`);
+      const { installSpec, version: latest } = latestRelease;
+      const sourceTag = IS_PRIVATE_CLI_DISTRIBUTION ? DEFAULT_CLI_RELEASE_TAG : tag;
+
+      log.info(`Latest version:  ${pc.bold(latest)} ${pc.dim(`(${sourceTag})`)}`);
 
       if (!isNewerVersion(latest, current)) {
         log.info(pc.green('Installed CLI is already on the latest version.'));
@@ -205,8 +272,7 @@ export function registerUpdateCommand(program: Command) {
       }
 
       const pm = options.packageManager || detectPackageManager();
-      const spec = `${cliPackageName}@${latest}`;
-      const { args, command } = buildInstallCommand(pm, spec);
+      const { args, command } = buildInstallCommand(pm, installSpec);
 
       log.info(`Upgrading via ${pc.bold(pm)}: ${pc.dim([command, ...args].join(' '))}`);
 

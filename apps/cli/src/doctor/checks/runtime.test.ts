@@ -167,12 +167,12 @@ describe('runtime.latest', () => {
     expect(outcome.fix).toBe('lh update');
   });
 
-  it('degrades to a warning when the registry is unreachable', async () => {
-    latest.value = new Error('ENOTFOUND registry.npmjs.org');
+  it('degrades to a warning when the release feed is unreachable', async () => {
+    latest.value = new Error('ENOTFOUND github.com');
 
     const outcome = await runCheck(runtimeChecks, 'runtime.latest');
 
     expect(outcome.status).toBe('warn');
-    expect(outcome.detail).toContain('Could not reach the npm registry');
+    expect(outcome.detail).toContain('Could not reach the CLI release feed');
   });
 });
