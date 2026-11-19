@@ -5,6 +5,7 @@ import path from 'node:path';
 import { Command } from 'commander';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { DEFAULT_SERVER_URL } from '../constants/urls';
 import { log } from '../utils/logger';
 import { registerAgentCommand } from './agent';
 
@@ -200,7 +201,7 @@ describe('agent command', () => {
       const program = createProgram();
       await program.parseAsync(['node', 'test', 'agent', 'list', '--json']);
 
-      expect(consoleSpy.mock.calls[0][0]).toContain('"url": "https://app.lobehub.com/agent/a1"');
+      expect(consoleSpy.mock.calls[0][0]).toContain(`"url": "${DEFAULT_SERVER_URL}/agent/a1"`);
     });
   });
 
@@ -630,7 +631,7 @@ describe('agent command', () => {
       ]);
 
       expect(JSON.parse(consoleSpy.mock.calls[0][0])).toMatchObject({ id: 'a1', title: 'Updated' });
-      expect(consoleSpy.mock.calls[0][0]).toContain('"url": "https://app.lobehub.com/agent/a1"');
+      expect(consoleSpy.mock.calls[0][0]).toContain(`"url": "${DEFAULT_SERVER_URL}/agent/a1"`);
     });
   });
 

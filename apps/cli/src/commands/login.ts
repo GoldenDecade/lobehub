@@ -9,16 +9,22 @@ import { saveCredentials } from '../auth/credentials';
 import { parseJwtSub } from '../auth/resolveToken';
 import { readCliApiKeyEnv } from '../constants/auth';
 import { CLI_PRODUCT_NAME } from '../constants/identity';
-import { OFFICIAL_SERVER_URL } from '../constants/urls';
+import { DEFAULT_SERVER_URL } from '../constants/urls';
 import { registerDevice, resolveDeviceIdentity } from '../device/register';
-import { loadSettings, normalizeUrl, saveSettings, settingsForLogin } from '../settings';
+import {
+  loadSettings,
+  normalizeUrl,
+  resolveServerUrl,
+  saveSettings,
+  settingsForLogin,
+} from '../settings';
 import { log } from '../utils/logger';
 
 const CLIENT_ID = 'lobehub-cli';
 const SCOPES = 'openid profile email offline_access';
 
 interface LoginOptions {
-  server: string;
+  server?: string;
 }
 
 interface DeviceAuthResponse {
@@ -59,9 +65,9 @@ export function registerLoginCommand(program: Command) {
     .description(
       `Log in to ${CLI_PRODUCT_NAME} via browser (Device Code Flow) or configure API key server`,
     )
-    .option('--server <url>', `${CLI_PRODUCT_NAME} server URL`, OFFICIAL_SERVER_URL)
+    .option('--server <url>', `${CLI_PRODUCT_NAME} server URL (default: ${DEFAULT_SERVER_URL})`)
     .action(async (options: LoginOptions) => {
-      const serverUrl = normalizeUrl(options.server) || OFFICIAL_SERVER_URL;
+      const serverUrl = normalizeUrl(options.server) || resolveServerUrl();
 
       log.info('Starting login...');
 

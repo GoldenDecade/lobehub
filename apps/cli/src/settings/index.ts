@@ -7,7 +7,7 @@ import { deviceMetricsBacklogFileName } from '@lobechat/device-control/metrics';
 import { deviceGatewayServerKey, normalizeDeviceGatewayUrl } from '@lobechat/device-gateway-client';
 
 import { resolveCliDirName } from '../constants/identity';
-import { OFFICIAL_AGENT_GATEWAY_URL, OFFICIAL_SERVER_URL } from '../constants/urls';
+import { DEFAULT_AGENT_GATEWAY_URL, DEFAULT_SERVER_URL } from '../constants/urls';
 import { log } from '../utils/logger';
 
 export interface StoredSettings {
@@ -50,14 +50,14 @@ export function resolveServerUrl(): string {
   const envServerUrl = normalizeUrl(process.env.LOBEHUB_SERVER);
   const settingsServerUrl = normalizeUrl(loadSettings()?.serverUrl);
 
-  return envServerUrl || settingsServerUrl || OFFICIAL_SERVER_URL;
+  return envServerUrl || settingsServerUrl || DEFAULT_SERVER_URL;
 }
 
 export function resolveAgentGatewayUrl(): string | undefined {
   const envUrl = normalizeUrl(process.env.AGENT_GATEWAY_URL);
   const settingsUrl = normalizeUrl(loadSettings()?.agentGatewayUrl);
 
-  return envUrl || settingsUrl || OFFICIAL_AGENT_GATEWAY_URL;
+  return envUrl || settingsUrl || DEFAULT_AGENT_GATEWAY_URL;
 }
 
 function normalizeDeviceGatewayUrls(value: unknown): Record<string, string> | undefined {
@@ -76,10 +76,10 @@ function normalizeSettings(settings: StoredSettings): StoredSettings {
   const serverUrl = normalizeUrl(settings.serverUrl);
 
   return {
-    agentGatewayUrl: agentGatewayUrl === OFFICIAL_AGENT_GATEWAY_URL ? undefined : agentGatewayUrl,
+    agentGatewayUrl: agentGatewayUrl === DEFAULT_AGENT_GATEWAY_URL ? undefined : agentGatewayUrl,
     deviceGatewayUrls: normalizeDeviceGatewayUrls(settings.deviceGatewayUrls),
     gatewayUrl: normalizeUrl(settings.gatewayUrl),
-    serverUrl: serverUrl === OFFICIAL_SERVER_URL ? undefined : serverUrl,
+    serverUrl: serverUrl === DEFAULT_SERVER_URL ? undefined : serverUrl,
   };
 }
 
@@ -257,7 +257,7 @@ export function loadSettings(): StoredSettings | null {
  */
 const legacyGatewayOwner = (settings: StoredSettings | null) =>
   settings?.gatewayUrl
-    ? deviceGatewayServerKey(settings.serverUrl || OFFICIAL_SERVER_URL)
+    ? deviceGatewayServerKey(settings.serverUrl || DEFAULT_SERVER_URL)
     : undefined;
 
 /**
@@ -300,7 +300,7 @@ export function settingsForLogin(
   existing: StoredSettings | null,
   serverUrl: string,
 ): StoredSettings {
-  const sameServer = (existing?.serverUrl || OFFICIAL_SERVER_URL) === serverUrl;
+  const sameServer = (existing?.serverUrl || DEFAULT_SERVER_URL) === serverUrl;
   const deviceGatewayUrls = { ...existing?.deviceGatewayUrls };
 
   const gatewayUrl = sameServer ? existing?.gatewayUrl : undefined;

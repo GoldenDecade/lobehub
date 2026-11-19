@@ -5,6 +5,7 @@ import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { resolveCliDirName } from '../constants/identity';
+import { DEFAULT_SERVER_URL } from '../constants/urls';
 import { log } from '../utils/logger';
 import {
   loadActiveWorkspace,
@@ -80,10 +81,10 @@ describe('settings', () => {
       expect(loadDeviceGatewayUrl(resolveServerUrl())).toBeUndefined();
     });
 
-    it('reads a gatewayUrl saved with official cloud as official cloud’s address only', () => {
+    it('reads a gatewayUrl saved with default server as default server’s address only', () => {
       saveSettings({ gatewayUrl: 'http://localhost:8788' });
 
-      expect(loadDeviceGatewayUrl('https://app.lobehub.com/')).toBe('http://localhost:8788');
+      expect(loadDeviceGatewayUrl(`${DEFAULT_SERVER_URL}/`)).toBe('http://localhost:8788');
       expect(loadDeviceGatewayUrl('https://self.example.com')).toBeUndefined();
     });
 
@@ -113,18 +114,18 @@ describe('settings', () => {
       expect(loadDeviceGatewayUrl('https://a.example.com')).toBe('https://gw-a.example.com');
     });
 
-    it('keeps an official cloud gatewayUrl with official cloud across a login elsewhere', () => {
+    it('keeps a default-server gatewayUrl with default server across a login elsewhere', () => {
       saveSettings({ gatewayUrl: 'http://localhost:8788' });
 
       saveSettings(settingsForLogin(loadSettings(), 'https://b.example.com'));
 
       expect(loadDeviceGatewayUrl('https://b.example.com')).toBeUndefined();
-      expect(loadDeviceGatewayUrl('https://app.lobehub.com')).toBe('http://localhost:8788');
+      expect(loadDeviceGatewayUrl(DEFAULT_SERVER_URL)).toBe('http://localhost:8788');
     });
   });
 
-  it('should clear official server settings instead of persisting them', () => {
-    saveSettings({ serverUrl: 'https://app.lobehub.com/' });
+  it('should clear default server settings instead of persisting them', () => {
+    saveSettings({ serverUrl: `${DEFAULT_SERVER_URL}/` });
 
     expect(fs.existsSync(settingsFile)).toBe(false);
     expect(loadSettings()).toBeNull();
@@ -152,14 +153,14 @@ describe('settings', () => {
     expect(resolveServerUrl()).toBe('https://env.example.com');
   });
 
-  it('should fall back to settings then official server', () => {
+  it('should fall back to settings then default server', () => {
     saveSettings({ serverUrl: 'https://settings.example.com/' });
 
     expect(resolveServerUrl()).toBe('https://settings.example.com');
 
     fs.unlinkSync(settingsFile);
 
-    expect(resolveServerUrl()).toBe('https://app.lobehub.com');
+    expect(resolveServerUrl()).toBe(DEFAULT_SERVER_URL);
   });
 
   it('should persist the active workspace and clear it back to personal', () => {
@@ -211,8 +212,8 @@ describe('settings', () => {
 
   it('should keep the connectionId even when settings.json is cleared', () => {
     const id = loadOrCreateConnectionId();
-    // Clearing official-server settings unlinks settings.json — connectionId must survive.
-    saveSettings({ serverUrl: 'https://app.lobehub.com/' });
+    // Clearing default-server settings unlinks settings.json — connectionId must survive.
+    saveSettings({ serverUrl: `${DEFAULT_SERVER_URL}/` });
 
     expect(fs.existsSync(settingsFile)).toBe(false);
     expect(loadOrCreateConnectionId()).toBe(id);
