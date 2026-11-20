@@ -139,6 +139,7 @@ jobs:
 
           TGZ=$(pnpm --dir apps/cli pack --pack-destination /tmp | tail -n 1)
           cp "$TGZ" /tmp/lobehub-cli-wq.tgz
+          cp apps/cli/scripts/install-wq.sh /tmp/install.sh
 
           node -e "
             const fs = require('fs');
@@ -160,8 +161,9 @@ jobs:
         run: |
           if gh release view wq-cli --repo "${{ github.repository }}" >/dev/null 2>&1; then
             gh release upload wq-cli /tmp/lobehub-cli-wq.tgz --repo "${{ github.repository }}" --clobber
+            gh release upload wq-cli /tmp/install.sh --repo "${{ github.repository }}" --clobber
             gh release upload wq-cli /tmp/latest.json --repo "${{ github.repository }}" --clobber
             gh release edit wq-cli --repo "${{ github.repository }}" --target wq --title "LobeHub CLI (wq)" --notes "Rolling private wq CLI release (${CLI_VERSION}, commit ${COMMIT_SHA})."
           else
-            gh release create wq-cli /tmp/lobehub-cli-wq.tgz /tmp/latest.json --repo "${{ github.repository }}" --target wq --title "LobeHub CLI (wq)" --notes "Rolling private wq CLI release (${CLI_VERSION}, commit ${COMMIT_SHA})." --prerelease
+            gh release create wq-cli /tmp/lobehub-cli-wq.tgz /tmp/install.sh /tmp/latest.json --repo "${{ github.repository }}" --target wq --title "LobeHub CLI (wq)" --notes "Rolling private wq CLI release (${CLI_VERSION}, commit ${COMMIT_SHA})." --prerelease
           fi
