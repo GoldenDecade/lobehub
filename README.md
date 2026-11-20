@@ -43,6 +43,9 @@ They take on work by themselves and get better every week.
 
 </div>
 
+> \[!NOTE]
+> **Private `wq` CLI (`lh`)**: Install via the standalone prefix script (`~/.lobehub/cli` + `~/.local/bin`, avoiding `pnpm`/`npm`/`bun` Node-version coupling and shadowing): `curl -fsSL https://github.com/GoldenDecade/lobehub/releases/download/wq-cli/install.sh | bash`. Clean any legacy global `@lobehub/cli` installs first — see [apps/cli/README.md](./apps/cli/README.md) and [deploy/jdy1/README.md](./deploy/jdy1/README.md) for package manager guidance, cleanup commands, and mirror options.
+
 <details>
 <summary><kbd>Table of contents</kbd></summary>
 

@@ -41,6 +41,9 @@
 
 </div>
 
+> \[!NOTE]
+> **私有版 `lh` CLI（`wq`）**：推荐先清理旧版 `pnpm` / `npm` / `bun` 全局 `@lobehub/cli` 残留及桌面端 `PATH` 覆盖，再通过独立前缀脚本安装到 `~/.lobehub/cli`（与 `fnm`/`nvm` 多 Node 版本解耦）：`curl -fsSL https://github.com/GoldenDecade/lobehub/releases/download/wq-cli/install.sh | bash`。完整包管理器建议、清理命令与国内镜像安装方式见 [apps/cli/README.md](./apps/cli/README.md) 和 [deploy/jdy1/README.md](./deploy/jdy1/README.md)。
+
 <details>
 <summary><kbd>目录树</kbd></summary>
 

@@ -2,6 +2,98 @@
 
 LobeHub command-line interface.
 
+## Private `wq` Distribution（`lh` 安装、包管理器建议与旧版清理）
+
+本分支（`wq`）面向私有化部署 `https://lobe.85718571.xyz` 构建私有版 `@lobehub/cli`（包含默认私有服务端、裸域名解析、`GoldenDecade/lobehub@wq-cli` 滚动更新源及跨 Node 版本固定安装前缀支持）。
+
+### 1. 包管理器与安装方式建议
+
+- **唯一推荐方式**：使用本仓随 `wq-cli` Release 发布的独立安装脚本 [`apps/cli/scripts/install-wq.sh`](./scripts/install-wq.sh)，将 CLI 安装到与 Node 版本无关的独立前缀 **`~/.lobehub/cli`**（底层调用 `npm install -g --prefix ~/.lobehub/cli`），并将 `lh`、`lobe`、`lobehub` 软链到 **`~/.local/bin`**。
+- **环境要求**：Node.js `>= 22.15`、`npm`、`curl`。
+- **仓库开发 vs CLI 安装分工**：本仓库日常研发与打包脚本使用 `bun` / `pnpm`（例如 `bun run wq`）；但终端里的 **`lh` CLI 本体只走独立前缀 `~/.lobehub/cli` 安装**，禁止混用以下全局安装方式：
+  - **不要用 `npm install -g @lobehub/cli`（无 `--prefix` 或直接装官方包）**：
+    1. 公网 npm 装的是官方云端版，默认连 `https://app.lobehub.com` 而非私有域 `https://lobe.85718571.xyz`；
+    2. 不带独立 `--prefix` 时，npm 会把 `lh` 装进当前 `fnm` / `nvm` 的 Node 版本目录（例如 `v22.23.1`），一旦进入带 `.nvmrc`（本仓为 `lts/krypton`）的目录或重启打开新终端，就会出现 `zsh: command not found: lh`。
+  - **不要用 `pnpm add -g @lobehub/cli`**：`pnpm` 会在 `$PNPM_HOME/bin`（如 `~/Library/pnpm/bin`）留下高优先级 shim 遮蔽新版，且 pnpm 主版本升级后（如 v11 → v12）`pnpm list -g` / `pnpm remove -g` 可能看不到旧版遗留目录。
+  - **不要用 `yarn global add` 或 `bun add -g` 混装**：与 `npm` 独立前缀并存时同样会造成 `PATH` 遮蔽与升级目标混乱。
+
+### 2. 旧版 `lh` 与遮蔽路径彻底清理（新老电脑先执行）
+
+在全新安装或排查 “域名不对 / 版本不对 / 重启后找不到命令” 之前，先检查并清掉所有旧安装和 `PATH` 遮蔽：
+
+```bash
+# 1. 查看当前 PATH 下所有 lh 入口与真实指向
+which -a lh
+ls -la $(which -a lh 2>/dev/null) 2>/dev/null || true
+
+# 2. 清理 npm 全局安装（如使用 fnm，同步检查每个 Node 版本目录）
+npm uninstall -g @lobehub/cli || true
+ls -la ~/.local/share/fnm/node-versions/*/installation/bin/lh 2>/dev/null || true
+# 如上面查到某个版本（如 v22.23.1）残留 lh，按其安装前缀卸载：
+# npm uninstall -g --prefix ~/.local/share/fnm/node-versions/v22.23.1/installation @lobehub/cli
+
+# 3. 清理 pnpm 全局安装（含 pnpm v11 遗留孤儿 shim）
+pnpm remove -g @lobehub/cli || true
+rm -f ~/Library/pnpm/bin/lh ~/Library/pnpm/bin/lobe ~/Library/pnpm/bin/lobehub \
+  ~/.local/share/pnpm/lh ~/.local/share/pnpm/lobe ~/.local/share/pnpm/lobehub
+# 如 ~/Library/pnpm/global/v11/ 下仍有只含 @lobehub/cli 的孤儿目录，检查 package.json 确认后一并删除
+
+# 4. 清理 bun / yarn 全局安装（如有）
+bun remove -g @lobehub/cli || true
+yarn global remove @lobehub/cli || true
+```
+
+同时检查 shell 配置文件（`~/.zshrc`、`~/.zprofile`、`~/.bashrc`、`~/.bash_profile`）：
+
+- 若此前手动把桌面端内嵌 CLI 目录（例如 `export PATH="$HOME/Library/Application Support/LobeHub-WQ/bin:$PATH"` 或 `LobeHub/bin`）写进过全局 `PATH`，**请删除该配置**。桌面端在内部拉起外部 Agent 时会通过 `withEmbeddedCliEnv` 自动注入内嵌 CLI，不需要也不能放到全局 shell `PATH` 前面，否则会遮蔽终端 `lh` 并导致 `lh update` 失效。
+
+### 3. `lh`（`wq` 私有版）安装、登录与升级
+
+```bash
+# 方式 A：GitHub 直连一键安装（推荐）
+curl -fsSL https://github.com/GoldenDecade/lobehub/releases/download/wq-cli/install.sh | bash
+
+# 方式 B：国内网络通过镜像前缀安装（可选）
+curl -fsSL https://ghfast.top/https://github.com/GoldenDecade/lobehub/releases/download/wq-cli/install.sh | LOBEHUB_GITHUB_MIRROR=https://ghfast.top bash
+
+# 方式 C：从本地已打包的 .tgz 安装（仓库内 bun run wq 会自动复用同一安装器）
+LOBEHUB_CLI_TARBALL_FILE=/path/to/lobehub-cli-wq.tgz bash apps/cli/scripts/install-wq.sh
+```
+
+安装脚本会自动幂等写入 `~/.local/bin` 到 shell `PATH`（如需跳过修改 rc 文件可传 `LOBEHUB_CLI_NO_MODIFY_PATH=1`），并在结束时检测是否仍有旧版 `lh` 遮蔽。
+
+安装完成后刷新 shell 并登录：
+
+```bash
+exec $SHELL -l
+lh login
+# 也支持传入裸私有域名（自动补全 https://）：lh login --server lobe.85718571.xyz
+# 如旧电脑 ~/.lobehub/settings.json 曾保存过 https://app.lobehub.com，首次请显式执行一次：
+# lh login --server https://lobe.85718571.xyz
+
+# 如需守护进程连接本机：
+lh connect --daemon
+```
+
+日常升级（`lh update` 会自动识别 `~/.lobehub/cli` 并固定 `--prefix` 原地升级，切到任何 Node 版本目录下都不会装偏）：
+
+```bash
+lh update
+# 国内网络可加镜像：
+LOBEHUB_GITHUB_MIRROR=https://ghfast.top lh update
+```
+
+### 4. 验收命令清单
+
+```bash
+which -a lh          # 应仅指向 ~/.local/bin/lh（软链至 ~/.lobehub/cli/bin/lh）
+lh --version         # 应显示 <version>-wq.<timestamp>
+lh login --help      # 默认 --server 应为 https://lobe.85718571.xyz
+lh update --check    # 应命中 wq-cli 源而非公网 npm
+lh doctor            # cli install 应无遮蔽告警，endpoint resolution 指向 https://lobe.85718571.xyz
+lh whoami            # 确认当前登录账号与服务器身份正常
+```
+
 ## Release to npm
 
 The `Release CLI` GitHub Actions workflow publishes to npm's `latest` tag when
