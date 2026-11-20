@@ -69,7 +69,7 @@ export function registerLoginCommand(program: Command) {
     .action(async (options: LoginOptions) => {
       const serverUrl = normalizeUrl(options.server) || resolveServerUrl();
 
-      log.info('Starting login...');
+      log.info(`Starting login to ${serverUrl}...`);
 
       const apiKey = readCliApiKeyEnv();
       if (apiKey) {

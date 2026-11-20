@@ -139,10 +139,22 @@ describe('settings', () => {
     expect(log.warn).toHaveBeenCalledWith(expect.stringContaining('Please delete this file'));
   });
 
-  it('should normalize trailing slashes', () => {
+  it('should normalize trailing slashes, whitespace, and bare hosts', () => {
     expect(normalizeUrl('https://self-hosted.example.com/')).toBe(
       'https://self-hosted.example.com',
     );
+    expect(normalizeUrl('  https://self-hosted.example.com///  ')).toBe(
+      'https://self-hosted.example.com',
+    );
+    expect(normalizeUrl('lobe.85718571.xyz')).toBe('https://lobe.85718571.xyz');
+    expect(normalizeUrl('lobe.85718571.xyz/')).toBe('https://lobe.85718571.xyz');
+    expect(normalizeUrl('localhost:3210')).toBe('http://localhost:3210');
+    expect(normalizeUrl('127.0.0.1:3210/')).toBe('http://127.0.0.1:3210');
+    expect(normalizeUrl('[::1]:3210')).toBe('http://[::1]:3210');
+    expect(normalizeUrl('wss://agent-gateway.example.com/')).toBe(
+      'wss://agent-gateway.example.com',
+    );
+    expect(normalizeUrl('   ')).toBeUndefined();
     expect(normalizeUrl(undefined)).toBeUndefined();
   });
 

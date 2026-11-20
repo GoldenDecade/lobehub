@@ -42,8 +42,18 @@ const WORKSPACE_ENROLLMENTS_FILE = path.join(SETTINGS_DIR, 'workspace-enrollment
 const ACTIVE_WORKSPACE_FILE = path.join(SETTINGS_DIR, 'active-workspace');
 const WORKSPACE_ID_PATTERN = /^[\w-]{1,64}$/;
 
+const HAS_URL_SCHEME = /^[a-z][\da-z+.-]*:\/\//i;
+const LOOPBACK_URL_PREFIX = /^(?:localhost|127\.0\.0\.1|\[::1\])(?::\d+)?(?:\/|$)/i;
+
 export function normalizeUrl(url: string | undefined): string | undefined {
-  return url ? url.replace(/\/$/, '') : undefined;
+  const trimmed = url?.trim();
+  if (!trimmed) return undefined;
+
+  const withScheme = HAS_URL_SCHEME.test(trimmed)
+    ? trimmed
+    : `${LOOPBACK_URL_PREFIX.test(trimmed) ? 'http' : 'https'}://${trimmed}`;
+
+  return withScheme.replace(/\/+$/, '');
 }
 
 export function resolveServerUrl(): string {

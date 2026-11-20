@@ -341,6 +341,22 @@ describe('login command', () => {
     expect(fetch).toHaveBeenCalledWith('https://test.com/oidc/device/auth', expect.any(Object));
   });
 
+  it('should default bare private domain --server to https and log the target server', async () => {
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(deviceAuthResponse())
+      .mockResolvedValueOnce(tokenSuccessResponse());
+
+    const program = createProgram();
+    await runLoginAndAdvanceTimers(program, ['--server', 'private.example.com/']);
+
+    expect(fetch).toHaveBeenCalledWith(
+      'https://private.example.com/oidc/device/auth',
+      expect.any(Object),
+    );
+    expect(saveSettings).toHaveBeenCalledWith({ serverUrl: 'https://private.example.com' });
+    expect(log.info).toHaveBeenCalledWith('Starting login to https://private.example.com...');
+  });
+
   it('should handle device auth failure', async () => {
     vi.mocked(fetch).mockResolvedValueOnce({
       ok: false,
