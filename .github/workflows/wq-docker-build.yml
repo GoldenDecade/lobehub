@@ -32,9 +32,12 @@ env:
   IMAGE_NAME: goldendecade/lobehub
 
 jobs:
-  sync-and-build:
-    name: Sync upstream/canary & Build wq image (linux/amd64)
+  sync:
+    name: Sync upstream/canary
     runs-on: ubuntu-latest
+    outputs:
+      sha: ${{ steps.vars.outputs.sha }}
+      sha_short: ${{ steps.vars.outputs.sha_short }}
     steps:
       - name: Checkout wq branch
         uses: actions/checkout@v4
@@ -58,9 +61,21 @@ jobs:
             exit 1
           fi
 
-      - name: Get short SHA
+      - name: Get commit SHA
         id: vars
-        run: echo "sha_short=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+        run: |
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          echo "sha_short=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+
+  sync-and-build:
+    name: Build wq image (linux/amd64)
+    needs: [sync]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout synced commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.sync.outputs.sha }}
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -80,10 +95,73 @@ jobs:
           platforms: linux/amd64
           push: true
           build-args: |
-            SHA=${{ steps.vars.outputs.sha_short }}
+            SHA=${{ needs.sync.outputs.sha_short }}
           tags: |
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:wq
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:wq-${{ steps.vars.outputs.sha_short }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:wq-${{ needs.sync.outputs.sha_short }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+  publish-cli:
+    name: Publish wq-cli GitHub release
+    needs: [sync]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout synced commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.sync.outputs.sha }}
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup environment
+        uses: ./.github/actions/setup-env
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Install CLI workspace dependencies
+        run: pnpm install
+        working-directory: apps/cli
+
+      - name: Build, stamp, and pack wq CLI
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          COMMIT_TS=$(git show -s --format=%ct HEAD)
+          COMMIT_SHA=$(git rev-parse HEAD)
+          CLI_VERSION="${VERSION}-wq.${COMMIT_TS}"
+
+          node -e "const fs=require('fs'),p='apps/cli/package.json',j=JSON.parse(fs.readFileSync(p,'utf8'));j.version=process.argv[1];fs.writeFileSync(p,JSON.stringify(j,null,2)+'\n');" "$CLI_VERSION"
+          (cd apps/cli && MINIFY=1 bun run build)
+
+          test "$(node apps/cli/dist/index.js --version)" = "$CLI_VERSION"
+          node apps/cli/dist/index.js login --help
+
+          TGZ=$(pnpm --dir apps/cli pack --pack-destination /tmp | tail -n 1)
+          cp "$TGZ" /tmp/lobehub-cli-wq.tgz
+
+          node -e "
+            const fs = require('fs');
+            const manifest = {
+              commit: process.argv[2],
+              publishedAt: new Date().toISOString(),
+              tarballUrl: 'https://github.com/GoldenDecade/lobehub/releases/download/wq-cli/lobehub-cli-wq.tgz',
+              version: process.argv[1],
+            };
+            fs.writeFileSync('/tmp/latest.json', JSON.stringify(manifest, null, 2) + '\n');
+          " "$CLI_VERSION" "$COMMIT_SHA"
+
+          echo "CLI_VERSION=${CLI_VERSION}" >> "$GITHUB_ENV"
+          echo "COMMIT_SHA=${COMMIT_SHA}" >> "$GITHUB_ENV"
+
+      - name: Publish rolling wq-cli GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if gh release view wq-cli --repo "${{ github.repository }}" >/dev/null 2>&1; then
+            gh release upload wq-cli /tmp/lobehub-cli-wq.tgz --repo "${{ github.repository }}" --clobber
+            gh release upload wq-cli /tmp/latest.json --repo "${{ github.repository }}" --clobber
+            gh release edit wq-cli --repo "${{ github.repository }}" --target wq --title "LobeHub CLI (wq)" --notes "Rolling private wq CLI release (${CLI_VERSION}, commit ${COMMIT_SHA})."
+          else
+            gh release create wq-cli /tmp/lobehub-cli-wq.tgz /tmp/latest.json --repo "${{ github.repository }}" --target wq --title "LobeHub CLI (wq)" --notes "Rolling private wq CLI release (${CLI_VERSION}, commit ${COMMIT_SHA})." --prerelease
+          fi
