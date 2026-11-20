@@ -11,6 +11,7 @@ import { printConnectStatus } from './connectStatus';
 import {
   applyGithubMirror,
   buildInstallCommand,
+  detectNpmGlobalPrefix,
   fetchLatestRelease,
   isNewerVersion,
   reportInstalledConnectStatus,
@@ -141,21 +142,93 @@ describe('fetchLatestRelease (private wq distribution)', () => {
   });
 });
 
+describe('detectNpmGlobalPrefix', () => {
+  it('extracts standalone and fnm POSIX prefixes', () => {
+    expect(
+      detectNpmGlobalPrefix(
+        '/Users/me/.lobehub/cli/lib/node_modules/@lobehub/cli/dist/index.js',
+        '@lobehub/cli',
+        'darwin',
+      ),
+    ).toBe('/Users/me/.lobehub/cli');
+
+    expect(
+      detectNpmGlobalPrefix(
+        '/Users/me/.local/share/fnm/node-versions/v22.23.1/installation/lib/node_modules/@lobehub/cli/dist/index.js',
+        '@lobehub/cli',
+        'linux',
+      ),
+    ).toBe('/Users/me/.local/share/fnm/node-versions/v22.23.1/installation');
+
+    expect(
+      detectNpmGlobalPrefix(
+        '/usr/local/lib/node_modules/@lobehub/cli/dist/index.js',
+        '@lobehub/cli',
+        'linux',
+      ),
+    ).toBe('/usr/local');
+  });
+
+  it('extracts Windows npm prefix without /lib', () => {
+    expect(
+      detectNpmGlobalPrefix(
+        String.raw`C:\Users\me\AppData\Roaming\npm\node_modules\@lobehub\cli\dist\index.js`,
+        '@lobehub/cli',
+        'win32',
+      ),
+    ).toBe('C:/Users/me/AppData/Roaming/npm');
+  });
+
+  it('returns undefined for non-matching or empty paths', () => {
+    expect(detectNpmGlobalPrefix('', '@lobehub/cli', 'darwin')).toBeUndefined();
+    expect(
+      detectNpmGlobalPrefix('/Users/me/repo/apps/cli/dist/index.js', '@lobehub/cli', 'darwin'),
+    ).toBeUndefined();
+    expect(
+      detectNpmGlobalPrefix(
+        '/Users/me/Library/pnpm/global/v11/node_modules/@lobehub/cli/dist/index.js',
+        '@lobehub/cli',
+        'darwin',
+      ),
+    ).toBeUndefined();
+  });
+});
+
 describe('buildInstallCommand', () => {
   it('builds the global install command per package manager', () => {
     expect(buildInstallCommand('npm', '@lobehub/cli@1.0.0')).toEqual({
       args: ['install', '-g', '@lobehub/cli@1.0.0'],
       command: 'npm',
     });
-    expect(buildInstallCommand('pnpm', '@lobehub/cli@1.0.0')).toEqual({
+    expect(
+      buildInstallCommand('npm', '/tmp/lobehub-cli-wq.tgz', {
+        npmPrefix: '/Users/me/.lobehub/cli',
+      }),
+    ).toEqual({
+      args: ['install', '-g', '--prefix', '/Users/me/.lobehub/cli', '/tmp/lobehub-cli-wq.tgz'],
+      command: 'npm',
+    });
+    expect(
+      buildInstallCommand('pnpm', '@lobehub/cli@1.0.0', {
+        npmPrefix: '/Users/me/.lobehub/cli',
+      }),
+    ).toEqual({
       args: ['add', '-g', '@lobehub/cli@1.0.0'],
       command: 'pnpm',
     });
-    expect(buildInstallCommand('bun', '@lobehub/cli@1.0.0')).toEqual({
+    expect(
+      buildInstallCommand('bun', '@lobehub/cli@1.0.0', {
+        npmPrefix: '/Users/me/.lobehub/cli',
+      }),
+    ).toEqual({
       args: ['add', '-g', '@lobehub/cli@1.0.0'],
       command: 'bun',
     });
-    expect(buildInstallCommand('yarn', '@lobehub/cli@1.0.0')).toEqual({
+    expect(
+      buildInstallCommand('yarn', '@lobehub/cli@1.0.0', {
+        npmPrefix: '/Users/me/.lobehub/cli',
+      }),
+    ).toEqual({
       args: ['global', 'add', '@lobehub/cli@1.0.0'],
       command: 'yarn',
     });

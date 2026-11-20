@@ -146,4 +146,38 @@ describe('update with a running connector', () => {
     ]);
     expect(spawn.mock.calls[0][1][2]).not.toMatch(/^https?:\/\//);
   });
+
+  it('pins npm update --prefix to the running CLI standalone install directory', async () => {
+    const originalArgv = process.argv;
+    process.argv = [
+      process.execPath,
+      '/Users/me/.lobehub/cli/lib/node_modules/@lobehub/cli/dist/index.js',
+    ];
+    state.latest = '0.0.72';
+    spawn.mockImplementation(() => {
+      const child = new EventEmitter();
+      queueMicrotask(() => child.emit('close', 0));
+      return child;
+    });
+
+    try {
+      const program = new Command();
+      registerUpdateCommand(program);
+      await program.parseAsync(['node', 'test', 'update', '--package-manager', 'npm']);
+
+      expect(spawn).toHaveBeenCalledTimes(1);
+      expect(spawn.mock.calls[0].slice(0, 2)).toEqual([
+        'npm',
+        [
+          'install',
+          '-g',
+          '--prefix',
+          '/Users/me/.lobehub/cli',
+          expect.stringMatching(/lobehub-cli-wq\.tgz$/),
+        ],
+      ]);
+    } finally {
+      process.argv = originalArgv;
+    }
+  });
 });

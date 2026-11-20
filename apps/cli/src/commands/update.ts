@@ -62,10 +62,45 @@ export function detectPackageManager(): PackageManager {
   return 'npm';
 }
 
+/**
+ * Infer the npm global `--prefix` that owns the currently running CLI binary so
+ * `lh update` upgrades the same install in place even when fnm/nvm switched the
+ * shell to a different Node version, or when installed into a standalone prefix
+ * such as `~/.lobehub/cli`.
+ */
+export function detectNpmGlobalPrefix(
+  entryPath: string = process.argv[1] ?? '',
+  packageName: string = cliPackageName,
+  platform: NodeJS.Platform = process.platform,
+): string | undefined {
+  if (!entryPath) return undefined;
+
+  let resolved = entryPath;
+  try {
+    resolved = realpathSync(entryPath);
+  } catch {
+    // Keep raw entryPath (for example in unit tests with synthetic paths)
+  }
+
+  const normalized = resolved.replaceAll('\\', '/');
+  const pkgSegment = `/node_modules/${packageName}/`;
+  const idx = normalized.lastIndexOf(pkgSegment);
+  if (idx <= 0) return undefined;
+
+  const parent = normalized.slice(0, idx);
+  if (platform !== 'win32' && parent.endsWith('/lib')) {
+    const prefix = parent.slice(0, -'/lib'.length);
+    return prefix || '/';
+  }
+
+  return platform === 'win32' ? parent : undefined;
+}
+
 /** Build the global-install command for the detected package manager. */
 export function buildInstallCommand(
   pm: PackageManager,
   spec: string,
+  options?: { npmPrefix?: string },
 ): { args: string[]; command: string } {
   switch (pm) {
     case 'pnpm': {
@@ -78,7 +113,12 @@ export function buildInstallCommand(
       return { args: ['add', '-g', spec], command: 'bun' };
     }
     default: {
-      return { args: ['install', '-g', spec], command: 'npm' };
+      return {
+        args: options?.npmPrefix
+          ? ['install', '-g', '--prefix', options.npmPrefix, spec]
+          : ['install', '-g', spec],
+        command: 'npm',
+      };
     }
   }
 }
@@ -298,6 +338,7 @@ export function registerUpdateCommand(program: Command) {
       }
 
       const pm = options.packageManager || detectPackageManager();
+      const npmPrefix = pm === 'npm' ? detectNpmGlobalPrefix() : undefined;
       let tempDownload: { cleanup: () => Promise<void>; filePath: string } | undefined;
       let targetSpec = installSpec;
 
@@ -308,18 +349,19 @@ export function registerUpdateCommand(program: Command) {
           targetSpec = tempDownload.filePath;
         }
 
-        const { args, command } = buildInstallCommand(pm, targetSpec);
+        const { args, command } = buildInstallCommand(pm, targetSpec, { npmPrefix });
         log.info(`Upgrading via ${pc.bold(pm)}: ${pc.dim([command, ...args].join(' '))}`);
 
         await runInstall(command, args);
       } catch (error) {
         log.error(`Update failed: ${(error as Error).message}`);
         if (/^https?:\/\//i.test(installSpec)) {
+          const manual = buildInstallCommand(pm, '/tmp/lobehub-cli-wq.tgz', { npmPrefix });
           log.error(
-            `You can upgrade manually: curl -fsSL "${installSpec}" -o /tmp/lobehub-cli-wq.tgz && ${buildInstallCommand(pm, '/tmp/lobehub-cli-wq.tgz').command} ${buildInstallCommand(pm, '/tmp/lobehub-cli-wq.tgz').args.join(' ')}`,
+            `You can upgrade manually: curl -fsSL "${installSpec}" -o /tmp/lobehub-cli-wq.tgz && ${manual.command} ${manual.args.join(' ')}`,
           );
         } else {
-          const manual = buildInstallCommand(pm, installSpec);
+          const manual = buildInstallCommand(pm, installSpec, { npmPrefix });
           log.error(`You can upgrade manually: ${[manual.command, ...manual.args].join(' ')}`);
         }
         process.exit(1);
