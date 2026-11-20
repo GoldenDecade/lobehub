@@ -143,8 +143,6 @@ describe('extractClaudeCodeBuiltinSkills', () => {
     expect(skills).toEqual([
       {
         description: 'Run a prompt or slash command on a recurring interval (e.g. /loop 5m /foo).',
-        fileCount: 0,
-        files: [],
         name: 'loop',
         path: '',
         previewRoot: '',
@@ -154,8 +152,6 @@ describe('extractClaudeCodeBuiltinSkills', () => {
       },
       {
         description: 'Reference for the Claude API / Anthropic SDK.',
-        fileCount: 0,
-        files: [],
         name: 'claude-api',
         path: '',
         previewRoot: '',
@@ -165,8 +161,6 @@ describe('extractClaudeCodeBuiltinSkills', () => {
       },
       {
         description: 'Launch and drive this project app.',
-        fileCount: 0,
-        files: [],
         name: 'run',
         path: '',
         previewRoot: '',
@@ -176,8 +170,6 @@ describe('extractClaudeCodeBuiltinSkills', () => {
       },
       {
         description: 'Review changed code.',
-        fileCount: 0,
-        files: [],
         name: 'simplify',
         path: '',
         previewRoot: '',
@@ -187,8 +179,6 @@ describe('extractClaudeCodeBuiltinSkills', () => {
       },
       {
         description: 'Execute large-scale work in parallel.',
-        fileCount: 0,
-        files: [],
         name: 'batch',
         path: '',
         previewRoot: '',
@@ -358,8 +348,6 @@ describe('listClaudeCodeSkills', () => {
     expect(skills).toEqual([
       {
         description: 'frontend-design skill',
-        fileCount: 2,
-        files: ['SKILL.md', 'references/tokens.md'],
         name: 'frontend-design:frontend-design',
         path: path.join(skillDir, 'SKILL.md'),
         previewRoot: skillDir,

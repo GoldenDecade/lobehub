@@ -114,9 +114,6 @@ const readSkillItem = async (
 
     return {
       description: parsed.description || undefined,
-      // The menu only needs the name; agy reads the SKILL.md body itself.
-      fileCount: 1,
-      files: ['SKILL.md'],
       name,
       path: skillFile,
       previewRoot: skillDir,

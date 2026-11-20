@@ -64,7 +64,6 @@ export const useProjectSkills = (
     () =>
       (data?.skills ?? []).map((skill) => ({
         description: skill.description,
-        files: skill.files,
         id: skill.skillDir,
         name: skill.name,
         scope: skill.scope,

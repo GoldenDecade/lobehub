@@ -103,8 +103,6 @@ describe('useSlashActionItems · project skills', () => {
       skills: [
         {
           description: 'Design skill',
-          fileCount: 1,
-          files: ['SKILL.md'],
           name: 'frontend-design:frontend-design',
           path: '/home/.claude/plugins/cache/frontend-design/skills/frontend-design/SKILL.md',
           previewRoot: '/home/.claude/plugins/cache/frontend-design/skills/frontend-design',
@@ -114,8 +112,6 @@ describe('useSlashActionItems · project skills', () => {
         },
         {
           description: 'Repeat a prompt on a recurring interval.',
-          fileCount: 0,
-          files: [],
           name: 'loop',
           path: '',
           previewRoot: '',

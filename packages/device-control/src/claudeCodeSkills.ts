@@ -9,7 +9,6 @@ import matter from 'gray-matter';
 
 import { resolveClaudeCodeProjectRoot } from './claudeCodeMemory';
 import type { ProjectSkillItem, ProjectSkillScope } from './types';
-import { listSkillFilesRecursive } from './workspace';
 
 export interface ListClaudeCodeSkillsOptions {
   cwd?: string;
@@ -297,13 +296,8 @@ const readPluginSkillItem = async (
       : `${pluginName}:${rawSkillName}`;
     if (!INVOCABLE_CLAUDE_SKILL_NAME.test(qualifiedName)) return null;
 
-    const files = await listSkillFilesRecursive(skillDir);
-    const resolvedFiles = files.length > 0 ? files : ['SKILL.md'];
-
     return {
       description: parsed.description,
-      fileCount: resolvedFiles.length,
-      files: resolvedFiles,
       name: qualifiedName,
       path: skillFile,
       previewRoot: skillDir,
@@ -392,8 +386,6 @@ export const extractClaudeCodeBuiltinSkills = (commands: unknown): ProjectSkillI
 
     skills.push({
       description,
-      fileCount: 0,
-      files: [],
       name,
       path: '',
       previewRoot: '',

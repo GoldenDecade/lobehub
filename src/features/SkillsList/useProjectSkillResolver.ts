@@ -67,7 +67,7 @@ export const useProjectSkillResolver = (
   // key with the slash menu / sidebar, so this adds no extra fetch.
   const cliAgentType = resolveCliSkillAgentType(agencyConfig?.heterogeneousProvider);
   const projectSkillsEnabled = (isDesktop || !!remoteDeviceId) && !!workingDirectory;
-  const { items, onOpenSkill } = useProjectSkills(
+  const { items, onOpenSkill, raw } = useProjectSkills(
     projectSkillsEnabled ? workingDirectory : undefined,
     remoteDeviceId,
     cliAgentType,
@@ -77,15 +77,17 @@ export const useProjectSkillResolver = (
     (name: string) => {
       const item = items.find((skill) => skill.name === name);
       if (!item) return undefined;
+      const rawSkill = raw?.skills.find((skill) => skill.skillDir === item.id);
+      const hasFile = rawSkill ? !!rawSkill.path : item.source !== 'claude-code-builtin';
       return {
         description: item.description,
         name: item.name,
         // Preview opens in every mode now — onOpenSkill reads over IPC locally
         // and over RPC for a bound device (like the Files tab). Binary-compiled
         // built-in skills carry no files on disk, so leave `open` unset.
-        ...((item.files?.length ?? 0) > 0 ? { open: () => onOpenSkill(item) } : {}),
+        ...(hasFile ? { open: () => onOpenSkill(item) } : {}),
       };
     },
-    [items, onOpenSkill],
+    [items, onOpenSkill, raw],
   );
 };
