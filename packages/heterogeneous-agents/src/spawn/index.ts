@@ -63,6 +63,13 @@ export {
   isAntigravityAcpSessionNotFoundError,
 } from './antigravityAcpSession';
 export {
+  type AntigravityLiveExit,
+  AntigravityLiveInput,
+  type AntigravityLiveInputOptions,
+  type AntigravityTurnOutcome,
+  resolveAntigravityLiveRuntimeEnd,
+} from './antigravityLiveInput';
+export {
   classifyHeteroProcessFailure,
   type ClassifyHeteroProcessFailureParams,
   HETERO_WORKING_DIRECTORY_NOT_FOUND,
@@ -154,6 +161,7 @@ export {
   DshAcpSession,
   type DshAcpSessionHandle,
   type DshAcpSessionOptions,
+  resolveDshSpawnCommand,
   spawnDshAcpSession,
   type SpawnDshAcpSessionOptions,
 } from './dshAcpSession';

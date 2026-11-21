@@ -42,6 +42,7 @@ const SelectorMenu = memo<SelectorMenuProps>(
     const supportsCatalog =
       !!capability.speed ||
       capability.model?.source === 'catalog' ||
+      provider.type === 'antigravity' ||
       provider.type === 'claude-code';
     const { data } = useTargetModelCatalog({
       agentId,
@@ -68,23 +69,28 @@ const SelectorMenu = memo<SelectorMenuProps>(
 
     const select = useCallback(
       (key: string, value: string) => {
-        if (key === 'model' && capability.model)
+        if (key === 'model' && capability.model) {
+          const selection = resolveModelSwitchSelection({
+            capability: { ...capability, model: capability.model },
+            effort: view.legacyEffort ?? capability.effort?.resolve(provider),
+            models: models ?? [],
+            speed: view.speed,
+            value,
+          });
           return void patch(
-            resolveModelSwitchSelection({
-              capability: { ...capability, model: capability.model },
-              effort: capability.effort?.resolve(provider),
-              models,
-              speed: view.speed,
-              value,
-            }),
+            view.legacyEffort ? { effort: view.legacyEffort, ...selection } : selection,
           );
+        }
 
         if (key === 'mode') return void patch({ mode: value as HeterogeneousAgentMode });
         if (key === 'speed') return void patch({ speed: value as HeterogeneousSpeedMode });
 
-        void patch({ effort: value as HeterogeneousReasoningEffort });
+        void patch({
+          effort: value as HeterogeneousReasoningEffort,
+          ...(view.legacyEffort ? { model: view.model } : {}),
+        });
       },
-      [capability, models, patch, provider, view.speed],
+      [capability, models, patch, provider, view.legacyEffort, view.model, view.speed],
     );
 
     const items = view.dimensions.map((dimension) =>

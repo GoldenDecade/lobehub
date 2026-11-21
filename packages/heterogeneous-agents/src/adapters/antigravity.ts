@@ -44,11 +44,24 @@ const extractUsage = (raw: unknown): UsageData | undefined => {
 const stringifyOutput = (value: unknown): string =>
   typeof value === 'string' ? value : value === undefined ? '' : JSON.stringify(value);
 
+export interface AntigravityAdapterOptions {
+  /**
+   * When stdin stays open across turns (liveInput / steer), keep accepting
+   * subsequent turns after a `SUCCESS` `result` instead of closing the adapter
+   * on the first turn's result.
+   */
+  runtimeEndStrategy?: 'on-result' | 'on-transport-close';
+  /**
+   * Shift the next steered message UUID when `agy` starts a subsequent
+   * `user_input` step, so the adapter can emit `step_complete { phase: 'user_message', uuid }`.
+   */
+  takeNextSteerUuid?: () => string | undefined;
+}
+
 /**
  * Native agy NDJSON protocol, not the Gemini/Claude stream-json protocol.
  * https://antigravity.google/docs/cli/headless/
- * LobeHub uses one process per turn and --conversation to resume. The native
- * protocol also supports multiple turns while stdin remains open.
+ * Supports both one-shot turns and multi-turn liveInput steering while stdin remains open.
  */
 export class AntigravityAdapter implements AgentEventAdapter {
   sessionId?: string;
@@ -57,21 +70,32 @@ export class AntigravityAdapter implements AgentEventAdapter {
   private flushed = false;
   private hasResponseText = false;
   private latestNonCheckpointStep?: number;
+  private latestTurnCompleted = false;
   private model?: string;
   private pendingTools = new Map<number, PendingTool>();
   private resultReceived = false;
   private completionValidated = false;
   private responseStep?: number;
   private responseStepErrored = false;
+  private readonly runtimeEndStrategy: 'on-result' | 'on-transport-close';
+  private seenInitialUserInput = false;
+  private seenUserInputSteps = new Set<number>();
   private stepIndex = 0;
   private stepTools: ToolCallPayload[] = [];
   private streamOpen = false;
+  private readonly takeNextSteerUuid?: () => string | undefined;
   private toolSinceResponse = false;
   private usageByStep = new Map<number, UsageData>();
+
+  constructor(options: AntigravityAdapterOptions = {}) {
+    this.runtimeEndStrategy = options.runtimeEndStrategy ?? 'on-result';
+    this.takeNextSteerUuid = options.takeNextSteerUuid;
+  }
 
   adapt(raw: unknown): HeterogeneousAgentEvent[] {
     if (this.flushed || this.resultReceived || !isRecord(raw)) return [];
     if (raw.event === 'init') {
+      this.latestTurnCompleted = false;
       this.sessionId = pickString(raw.conversation_id);
       this.model = pickString(toRecord(raw.init)?.model);
       return this.openStream();
@@ -90,9 +114,23 @@ export class AntigravityAdapter implements AgentEventAdapter {
     if (step.step_type !== 'checkpoint') {
       this.latestNonCheckpointStep = Math.max(this.latestNonCheckpointStep ?? -1, index);
     }
+    this.latestTurnCompleted = false;
 
     const events: HeterogeneousAgentEvent[] = [];
-    if (step.step_type === 'agent_response') {
+    if (step.step_type === 'user_input') {
+      if (!this.seenUserInputSteps.has(index)) {
+        this.seenUserInputSteps.add(index);
+        if (!this.seenInitialUserInput) {
+          this.seenInitialUserInput = true;
+        } else {
+          const uuid = this.takeNextSteerUuid?.();
+          if (uuid) {
+            events.push(...this.closeStream());
+            events.push(this.event('step_complete', { phase: 'user_message', uuid }));
+          }
+        }
+      }
+    } else if (step.step_type === 'agent_response') {
       if (
         this.toolSinceResponse ||
         (this.responseStep !== undefined && this.responseStep !== index)
@@ -135,7 +173,7 @@ export class AntigravityAdapter implements AgentEventAdapter {
   }
 
   validateCompletion(): HeterogeneousAgentEvent[] {
-    if (this.resultReceived || this.completionValidated) return [];
+    if (this.resultReceived || this.latestTurnCompleted || this.completionValidated) return [];
     this.completionValidated = true;
     return [
       this.event('error', {
@@ -328,7 +366,10 @@ export class AntigravityAdapter implements AgentEventAdapter {
   }
 
   private handleResult(result: UnknownRecord): HeterogeneousAgentEvent[] {
-    this.resultReceived = true;
+    const keepOpenForMoreTurns =
+      this.runtimeEndStrategy === 'on-transport-close' && result.status === 'SUCCESS';
+    if (!keepOpenForMoreTurns) this.resultReceived = true;
+    this.latestTurnCompleted = true;
     this.sessionId ??= pickString(result.conversation_id);
     // Materialize unfinished tools in their owning turn before a fallback response opens a new one.
     const { events, hasUnsettledTools } = this.settleResultPendingTools();
@@ -374,6 +415,14 @@ export class AntigravityAdapter implements AgentEventAdapter {
       );
     }
     events.push(...this.closeStream());
+    if (keepOpenForMoreTurns) {
+      this.hasResponseText = false;
+      this.responseStep = undefined;
+      this.responseStepErrored = false;
+      this.toolSinceResponse = false;
+      this.stepTools = [];
+      this.stepIndex += 1;
+    }
     // Result counters are cumulative across a resumed conversation, so they are
     // not emitted as `result_usage`: trace recorders treat that phase as the
     // run total. Step_update usage (turn_metadata) is the only per-run source.

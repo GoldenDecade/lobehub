@@ -523,6 +523,7 @@ export type HeterogeneousAgentModelCatalog =
   | {
       error: {
         code:
+          | 'auth_required'
           | 'cli_not_found'
           | 'command_failed'
           | 'device_unavailable'

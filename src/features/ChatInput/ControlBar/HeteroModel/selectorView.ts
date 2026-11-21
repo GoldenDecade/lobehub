@@ -14,6 +14,7 @@ import {
 } from '@lobechat/types';
 import type { TFunction } from 'i18next';
 
+import { findAntigravityVariant } from './antigravityModels';
 import type { TriggerLabel } from './labels';
 import { getEffortLabelKeys, getModeLabelKey, getModelLabel, getTriggerLabel } from './labels';
 import { getStaticModelOptions } from './modelOptions';
@@ -45,6 +46,7 @@ export interface SelectorView {
   dimensions: SelectorDimension[];
   isCatalogModel: boolean;
   isFastSpeed: boolean;
+  legacyEffort?: HeterogeneousReasoningEffort;
   model: string;
   /** Where the current model comes from; shown on the catalog model submenu too. */
   modelSource: string;
@@ -106,7 +108,7 @@ export const resolveModelSwitchSelection = ({
     !!effort &&
     effort !== HETEROGENEOUS_AGENT_DEFAULT_SELECTION &&
     !!capability.effort &&
-    !capability.effort.levels(value).includes(effort);
+    !capability.effort.levels(value, models).includes(effort);
 
   return {
     ...(resetEffort ? { effort: HETEROGENEOUS_AGENT_DEFAULT_SELECTION } : {}),
@@ -144,8 +146,12 @@ export const buildSelectorView = ({
   /** Promotes a static-default provider (e.g. Claude Code with `modelPicker.options`) to catalog mode. */
   useCatalogModel?: boolean;
 }): SelectorView => {
-  const model = capability.model?.resolve(provider) ?? HETEROGENEOUS_AGENT_DEFAULT_SELECTION;
-  const effort = capability.effort?.resolve(provider);
+  const configuredModel =
+    capability.model?.resolve(provider) ?? HETEROGENEOUS_AGENT_DEFAULT_SELECTION;
+  const variant =
+    provider.type === 'antigravity' ? findAntigravityVariant(models, configuredModel) : undefined;
+  const model = variant?.model.id ?? configuredModel;
+  const effort = variant?.effort ?? capability.effort?.resolve(provider);
   const mode = capability.mode?.resolve(provider);
   const speed = capability.speed?.resolve(provider) ?? HETEROGENEOUS_AGENT_DEFAULT_SELECTION;
   const isFastSpeed = speed === 'fast' || speed === 'ultrafast';
@@ -175,7 +181,9 @@ export const buildSelectorView = ({
   };
 
   // A pin from another runtime or auth mode is ignored, so it is not the source.
-  const modelSource = getSource(topicPin?.model !== undefined && topicPin.model === model);
+  const modelSource = getSource(
+    topicPin?.model !== undefined && topicPin.model === configuredModel,
+  );
 
   const dimensions: SelectorDimension[] = [];
 
@@ -215,14 +223,15 @@ export const buildSelectorView = ({
   }
 
   if (capability.effort && effort) {
+    const levels = capability.effort.levels(model, models ?? []);
     dimensions.push({
       current: effort,
       key: 'reasoning',
       label: t('heteroAgent.modelSelector.reasoning'),
-      source: getSource(topicPin?.effort !== undefined),
+      source: variant ? modelSource : getSource(topicPin?.effort !== undefined),
       options: [
         { label: defaultLabel, value: HETEROGENEOUS_AGENT_DEFAULT_SELECTION },
-        ...capability.effort.levels(model).map((level) => ({
+        ...levels.map((level) => ({
           label: t(effortLabelKeys[level]),
           value: level,
         })),
@@ -278,6 +287,7 @@ export const buildSelectorView = ({
     dimensions,
     isCatalogModel,
     isFastSpeed,
+    legacyEffort: variant?.effort,
     model,
     speed,
     modelSource,
