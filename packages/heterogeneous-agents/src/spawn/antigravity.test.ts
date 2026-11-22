@@ -2,15 +2,8 @@ import { describe, expect, it } from 'vitest';
 
 import { buildAntigravityArgs } from './antigravity';
 import { buildAntigravityAcpPrompt } from './antigravityAcpSession';
-import { buildAgentInput } from './input/buildAgentInput';
 
 describe('Antigravity process input', () => {
-  it('directs callers away from legacy buildAgentInput to the native ACP session', async () => {
-    await expect(buildAgentInput('antigravity', 'hello')).rejects.toThrow(
-      'antigravity runs over the ACP transport only',
-    );
-  });
-
   it('normalizes multimodal prompts into ACP text + base64 image blocks', async () => {
     const pngBase64 =
       'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
@@ -45,5 +38,20 @@ describe('Antigravity process input', () => {
       '--effort',
       'high',
     ]);
+    expect(buildAntigravityArgs({})).toContain('--dangerously-skip-permissions');
+  });
+
+  it.each([
+    '--output-format=json',
+    '--input-format',
+    '--prompt-interactive=hello',
+    '--remote-control',
+    '-i',
+    '-p',
+    '--continue',
+    '--conversation=other',
+    '--',
+  ])('rejects custom %s that breaks protocol or session ownership', (flag) => {
+    expect(() => buildAntigravityArgs({ extraArgs: [flag] })).toThrow('LobeHub manages');
   });
 });
