@@ -126,9 +126,11 @@ const executePreparedCall = async (
           data: {
             attempt: attempt + 1,
             delayMs,
+            ...(classified.status !== undefined && { errorStatus: classified.status }),
             errorType: classified.code,
             kind: classified.kind,
             maxAttempts,
+            provider: prepared.provider,
           },
           type: 'stream_retry',
         };

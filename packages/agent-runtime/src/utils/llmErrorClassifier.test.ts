@@ -87,7 +87,14 @@ describe('llmErrorClassifier', () => {
 
   it('falls back to numeric status and keyword classification without injected specs', () => {
     expect(classifyLLMError({ code: 401, message: 'upstream refused' }).kind).toBe('stop');
-    expect(classifyLLMError({ code: 429, message: 'upstream refused' }).kind).toBe('retry');
+    expect(classifyLLMError({ code: 429, message: 'upstream refused' })).toMatchObject({
+      kind: 'retry',
+      status: 429,
+    });
+    expect(classifyLLMError({ message: 'server error', type: 500 })).toMatchObject({
+      kind: 'retry',
+      status: 500,
+    });
     expect(classifyLLMError(new Error('unexpected upstream issue')).kind).toBe('retry');
   });
 

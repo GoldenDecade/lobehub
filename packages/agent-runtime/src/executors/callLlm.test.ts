@@ -588,6 +588,7 @@ describe('callLlm executor', () => {
         errorType: 'UPSTREAM_TIMEOUT',
         kind: 'retry',
         maxAttempts: 3,
+        provider: 'openai',
       },
       type: 'stream_retry' as const,
     };
@@ -629,6 +630,51 @@ describe('callLlm executor', () => {
     expect(transport.trace.recordResult).toHaveBeenCalledWith(finalOutput);
     expect(policy.onError).not.toHaveBeenCalled();
     expect(transport.trace.close).toHaveBeenCalledWith(undefined);
+  });
+
+  it('includes errorStatus and provider in stream_retry when classified error has an HTTP status', async () => {
+    const state = createState();
+    const error = { body: { error: {}, provider: 'supergrok' }, type: 500 };
+    const firstOutput = createAttemptOutput('partial');
+    const finalOutput = createAttemptOutput('complete');
+    const runAttempt = vi
+      .fn()
+      .mockResolvedValueOnce({ error, ok: false, output: firstOutput })
+      .mockResolvedValueOnce({ ok: true, output: finalOutput });
+    const policy = createRetryPolicy({
+      classifyError: vi.fn().mockReturnValue({
+        kind: 'retry',
+        message: 'unknown error',
+        status: 500,
+      }),
+    });
+    const transport = createCallTransport({ policy, runAttempt });
+    const stream = createStreamSink();
+    const host = createHost(
+      transport.llm,
+      createMessageTransport(),
+      stream,
+      createContextBuilder(),
+    );
+
+    await callLlm(host)(
+      { payload: { messages: [], model: 'grok-4.7', provider: 'supergrok' }, type: 'call_llm' },
+      state,
+    );
+
+    expect(stream.publishEvent).toHaveBeenCalledWith({
+      data: {
+        attempt: 2,
+        delayMs: 1000,
+        errorStatus: 500,
+        errorType: undefined,
+        kind: 'retry',
+        maxAttempts: 3,
+        provider: 'supergrok',
+      },
+      stepIndex: 0,
+      type: 'stream_retry',
+    });
   });
 
   it('stops retrying and persists the partial attempt when the operation is interrupted', async () => {

@@ -4,6 +4,7 @@ export interface ClassifiedLLMError {
   code?: string;
   kind: LLMErrorKind;
   message: string;
+  status?: number;
 }
 
 export interface LLMErrorCodeSpecLike {
@@ -120,7 +121,7 @@ const normalizeSignal = (error: unknown): LLMErrorSignal => {
           ? raw.status
           : typeof raw.statusCode === 'number'
             ? raw.statusCode
-            : (numericStatusFromCode(raw.code) ?? tryExtractStatus(message)),
+            : (numericStatusFromCode(raw.code, raw.type) ?? tryExtractStatus(message)),
     };
   }
 
@@ -165,8 +166,14 @@ const normalizeSignal = (error: unknown): LLMErrorSignal => {
               ? nested.status
               : typeof nestedError?.status === 'number'
                 ? nestedError.status
-                : (numericStatusFromCode(raw.code, nested?.code, nestedError?.code) ??
-                  tryExtractStatus(message)),
+                : (numericStatusFromCode(
+                    raw.code,
+                    raw.type,
+                    nested?.code,
+                    nested?.type,
+                    nestedError?.code,
+                    nestedError?.type,
+                  ) ?? tryExtractStatus(message)),
     };
   }
 
@@ -268,6 +275,7 @@ export const createLLMErrorClassifier = (options: LLMErrorClassifierOptions = {}
         code: signal.code || signal.errorType,
         kind: classifyKind(signal),
         message: signal.message,
+        ...(signal.status !== undefined && { status: signal.status }),
       };
     } catch {
       return {

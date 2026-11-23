@@ -6,11 +6,12 @@ import { useTranslation } from 'react-i18next';
 import BubblesLoading from '@/components/BubblesLoading';
 import { useChatStore } from '@/store/chat';
 import { operationSelectors } from '@/store/chat/selectors';
-import { type OperationType, type StreamRetryMetadata } from '@/store/chat/slices/operation/types';
+import { type OperationType } from '@/store/chat/slices/operation/types';
 import { elapsedTimeStyles, shinyTextStyles } from '@/styles/loading';
 
 import { resolveOperationActivity } from '../../utils/operationActivity';
 import { useShowBackgroundRunHint } from '../Contexts/BackgroundRunHintContext';
+import { resolveStreamRetryLabel } from './streamRetryLabel';
 
 const ELAPSED_TIME_THRESHOLD = 2100; // Show elapsed time after 2 seconds
 
@@ -78,36 +79,16 @@ const ContentLoading = memo<ContentLoadingProps>(({ id, startTime: startTimeOver
       : t('operation.heterogeneousAgentFallback');
   };
 
-  const getRetryStatusText = (retry: StreamRetryMetadata) => {
-    const parts = [
-      typeof retry.errorStatus === 'number' ? String(retry.errorStatus) : undefined,
-      retry.error,
-    ].filter(Boolean);
-    return parts.join(' ') || t('operation.streamRetry.unknownStatus');
-  };
-
   const getStreamRetryLabel = () => {
     const retry = runningOp?.metadata?.streamRetry;
     if (!retry) return undefined;
 
-    const name = getHeterogeneousAgentName();
-    const status = getRetryStatusText(retry);
-
-    if (
-      typeof retry.attempt === 'number' &&
-      Number.isFinite(retry.attempt) &&
-      typeof retry.maxAttempts === 'number' &&
-      Number.isFinite(retry.maxAttempts)
-    ) {
-      return t('operation.streamRetry.withAttempt', {
-        attempt: retry.attempt,
-        maxAttempts: retry.maxAttempts,
-        name,
-        status,
-      });
-    }
-
-    return t('operation.streamRetry', { name, status });
+    return resolveStreamRetryLabel({
+      heterogeneousType: runningOp?.metadata?.heterogeneousType as string | undefined,
+      operationType,
+      retry,
+      t,
+    });
   };
 
   const getOperationLabel = () => {

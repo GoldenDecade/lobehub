@@ -25,9 +25,11 @@ export interface AgentEventStreamRetry {
   data: {
     attempt: number;
     delayMs: number;
+    errorStatus?: number;
     errorType?: string;
     kind?: string;
     maxAttempts: number;
+    provider?: string;
   };
   type: 'stream_retry';
 }

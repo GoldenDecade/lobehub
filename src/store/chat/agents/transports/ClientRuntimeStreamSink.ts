@@ -68,15 +68,19 @@ export class ClientRuntimeStreamSink implements StreamSink {
       const data = event.data as {
         attempt?: number;
         delayMs?: number;
+        errorStatus?: number;
         errorType?: string;
         maxAttempts?: number;
+        provider?: string;
       };
       this.get().updateOperationMetadata(this.operationId, {
         streamRetry: {
           attempt: data.attempt,
           delayMs: data.delayMs,
           error: data.errorType,
+          errorStatus: data.errorStatus,
           maxAttempts: data.maxAttempts,
+          provider: data.provider,
         },
       });
       return;
