@@ -332,4 +332,30 @@ describe('AntigravityAcpSession', () => {
       ),
     ).toBe(false);
   });
+
+  it('strips inherited SSH session variables under Connect service mode without mutating input env', async () => {
+    const proc = createAcpProcess();
+    spawnMock.mockReturnValue(proc.child);
+    const inputEnv = {
+      DBUS_SESSION_BUS_ADDRESS: 'unix:path=/run/user/1000/bus',
+      LOBEHUB_CONNECT_SERVICE: '1',
+      SSH_AUTH_SOCK: '/tmp/ssh-agent.sock',
+      SSH_CLIENT: 'test-client',
+      SSH_CONNECTION: 'test-connection',
+      SSH_TTY: '/dev/pts/1',
+    };
+
+    const session = new AntigravityAcpSession(createSessionOptions({ env: inputEnv }));
+    await session.run();
+
+    const spawnEnv = spawnMock.mock.calls[0]?.[2]?.env as NodeJS.ProcessEnv;
+    expect(spawnEnv.DBUS_SESSION_BUS_ADDRESS).toBe(inputEnv.DBUS_SESSION_BUS_ADDRESS);
+    expect(spawnEnv.SSH_AUTH_SOCK).toBe(inputEnv.SSH_AUTH_SOCK);
+    expect(spawnEnv.SSH_CLIENT).toBeUndefined();
+    expect(spawnEnv.SSH_CONNECTION).toBeUndefined();
+    expect(spawnEnv.SSH_TTY).toBeUndefined();
+    expect(inputEnv.SSH_CLIENT).toBe('test-client');
+    expect(inputEnv.SSH_CONNECTION).toBe('test-connection');
+    expect(inputEnv.SSH_TTY).toBe('/dev/pts/1');
+  });
 });

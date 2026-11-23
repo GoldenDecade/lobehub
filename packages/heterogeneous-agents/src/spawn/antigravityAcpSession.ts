@@ -10,6 +10,7 @@ import {
 } from './acpAgentSession';
 import type { AcpRpcMessage } from './acpStdioClient';
 import { AcpRpcResponseError, AcpServerRequestError } from './acpStdioClient';
+import { getAntigravitySpawnEnv } from './antigravity';
 import type { BuildAgentInputOptions } from './input';
 import { normalizeImage } from './input';
 import type {
@@ -274,12 +275,15 @@ export class AntigravityAcpSession extends AcpAgentSession<
 
   constructor(options: AntigravityAcpSessionOptions) {
     const extracted = extractAntigravitySessionFlags(options.args);
-    super(options, {
-      args: buildAntigravityAcpArgs(options.args),
-      pipeline: { agentType: 'antigravity-acp', cwd: options.cwd },
-      processLabel: 'Antigravity ACP',
-      transport: TRANSPORT,
-    });
+    super(
+      { ...options, env: getAntigravitySpawnEnv(options.env) },
+      {
+        args: buildAntigravityAcpArgs(options.args),
+        pipeline: { agentType: 'antigravity-acp', cwd: options.cwd },
+        processLabel: 'Antigravity ACP',
+        transport: TRANSPORT,
+      },
+    );
     this.effortFromArgs = extracted.effort;
     this.modeFromArgs = extracted.mode;
     this.modelFromArgs = extracted.model;
@@ -287,6 +291,11 @@ export class AntigravityAcpSession extends AcpAgentSession<
 
   get sessionId(): string | undefined {
     return this.acpSessionId;
+  }
+
+  /** Spawn the ACP child process eagerly (idempotent with `run()`). */
+  startProcess(): Promise<void> {
+    return this.client.start();
   }
 
   protected async prepareRun(): Promise<void> {

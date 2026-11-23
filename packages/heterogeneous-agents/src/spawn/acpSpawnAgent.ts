@@ -11,6 +11,7 @@ import { buildCursorAcpPrompt, CursorAcpSession } from './cursorAcpSession';
 import { buildDevinAcpPrompt, DevinAcpSession } from './devinAcpSession';
 import { buildDroidAcpPrompt, DroidAcpSession } from './droidAcpSession';
 import { buildGrokAcpPrompt, GrokAcpSession } from './grokAcpSession';
+import { getHeterogeneousAgentSpawnEnv } from './presetEnv';
 import type { SpawnAgentHandle, SpawnAgentOptions } from './spawnAgent';
 import { buildTraeAcpPrompt, TraeAcpSession } from './traeAcpSession';
 import { assertSpawnableWorkingDirectory } from './workingDirectory';
@@ -172,7 +173,7 @@ export const spawnAntigravityAcpAgent = async (
     commandPath: command,
     cwd,
     detached: options.detached,
-    env: { ...process.env, ...options.env },
+    env: getHeterogeneousAgentSpawnEnv('antigravity', options.env, process.env),
     initialModel: options.initialModel,
     onEvents: bridge.onEvents,
     onRawMessage: teeAcpRawStdout(options.onRawStdout),
@@ -184,6 +185,7 @@ export const spawnAntigravityAcpAgent = async (
     resumeSessionId: options.resumeSessionId,
     sessionId: options.operationId,
   });
+  await session.startProcess();
   return createAcpSpawnHandle(bridge, session);
 };
 
