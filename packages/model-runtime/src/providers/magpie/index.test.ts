@@ -1,9 +1,11 @@
 // @vitest-environment node
 import { ModelProvider } from 'model-bank';
 import OpenAI from 'openai';
+import type { Mock } from 'vitest';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { magpieModelKey, params } from './index';
+import * as getModelPricingModule from '../../utils/getModelPricing';
+import { handleMagpieChatCompletionPayload, LobeMagpieAI, magpieModelKey, params } from './index';
 
 const model = (over: Record<string, any>) => ({ object: 'model', ...over });
 
@@ -314,5 +316,152 @@ describe('the model list magpie serves', () => {
     await load([model({ id: 'openai/gpt-5.6-sol' })]);
 
     expect(listModels).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps thinkingLevel3 and strips unsupported urlContext for Gemini 3.8 Flash', async () => {
+    const cards = await load([
+      model({
+        id: 'kris-500/models/gemini-3.8-flash',
+        reasoning: true,
+        reasoning_levels: ['low', 'medium', 'high'],
+      }),
+    ]);
+
+    expect(cards[0].reasoning).toBe(true);
+    expect(cards[0].settings?.extendParams).toContain('thinkingLevel3');
+    expect(cards[0].settings?.extendParams).not.toContain('urlContext');
+  });
+});
+
+describe('handleMagpieChatCompletionPayload', () => {
+  const basePayload = {
+    messages: [{ content: 'hi', role: 'user' as const }],
+    model: 'kris-500/models/gemini-3.8-flash',
+  };
+
+  it('maps Gemini thinkingLevel to reasoning_effort and strips urlContext', () => {
+    const result = handleMagpieChatCompletionPayload({
+      ...basePayload,
+      thinkingLevel: 'high',
+      urlContext: true,
+    });
+
+    expect(result).toEqual({
+      ...basePayload,
+      reasoning_effort: 'high',
+      stream: true,
+    });
+    expect(result).not.toHaveProperty('thinkingLevel');
+    expect(result).not.toHaveProperty('urlContext');
+  });
+
+  it('maps Claude adaptive thinking + effort to reasoning_effort and strips vendor-only fields', () => {
+    const result = handleMagpieChatCompletionPayload({
+      ...basePayload,
+      effort: 'xhigh',
+      enabledContextCaching: false,
+      model: 'anthropic/claude-opus-4-7',
+      thinking: { type: 'adaptive' },
+    });
+
+    expect(result).toEqual({
+      messages: basePayload.messages,
+      model: 'anthropic/claude-opus-4-7',
+      reasoning_effort: 'xhigh',
+      stream: true,
+    });
+  });
+
+  it('maps thinking.type=disabled to reasoning_effort=none even when effort is present', () => {
+    const result = handleMagpieChatCompletionPayload({
+      ...basePayload,
+      effort: 'high',
+      thinking: { type: 'disabled' },
+    });
+
+    expect(result.reasoning_effort).toBe('none');
+    expect(result).not.toHaveProperty('thinking');
+    expect(result).not.toHaveProperty('effort');
+  });
+
+  it('maps numeric thinkingBudget and skips -1 dynamic budget', () => {
+    expect(
+      handleMagpieChatCompletionPayload({ ...basePayload, thinkingBudget: 0 }).reasoning_effort,
+    ).toBe('none');
+    expect(
+      handleMagpieChatCompletionPayload({ ...basePayload, thinkingBudget: 4096 }).reasoning_effort,
+    ).toBe('medium');
+
+    const dynamicResult = handleMagpieChatCompletionPayload({
+      ...basePayload,
+      thinkingBudget: -1,
+    });
+    expect(dynamicResult).not.toHaveProperty('reasoning_effort');
+    expect(dynamicResult).not.toHaveProperty('thinkingBudget');
+  });
+
+  it('maps thinking.budget_tokens to reasoning_effort', () => {
+    const result = handleMagpieChatCompletionPayload({
+      ...basePayload,
+      thinking: { budget_tokens: 1024, type: 'enabled' },
+    });
+
+    expect(result.reasoning_effort).toBe('low');
+    expect(result).not.toHaveProperty('thinking');
+  });
+
+  it('keeps explicit reasoning_effort ahead of thinking config', () => {
+    const result = handleMagpieChatCompletionPayload({
+      ...basePayload,
+      reasoning_effort: 'high',
+      thinking: { budget_tokens: 1024, type: 'enabled' },
+    });
+
+    expect(result.reasoning_effort).toBe('high');
+    expect(result).not.toHaveProperty('thinking');
+  });
+
+  it('strips imageAspectRatio, imageResolution, enabledSearch, and reasoning.mode', () => {
+    const result = handleMagpieChatCompletionPayload({
+      ...basePayload,
+      enabledSearch: true,
+      imageAspectRatio: '16:9',
+      imageResolution: '2K',
+      reasoning: { mode: 'pro' },
+    });
+
+    expect(result).toEqual({
+      ...basePayload,
+      stream: true,
+    });
+  });
+});
+
+describe('LobeMagpieAI.chat', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('forwards reasoning_effort without thinkingLevel or frequency_penalty for Gemini 3.8 Flash', async () => {
+    vi.spyOn(getModelPricingModule, 'getModelPricing').mockResolvedValue(undefined);
+    const instance = new LobeMagpieAI({ apiKey: 'magpie' });
+    const createSpy = vi
+      .spyOn(instance['client'].chat.completions, 'create')
+      .mockResolvedValue(new ReadableStream() as any);
+
+    await instance.chat({
+      frequency_penalty: 0.5,
+      messages: [{ content: 'hi', role: 'user' }],
+      model: 'kris-500/models/gemini-3.8-flash',
+      thinkingLevel: 'high',
+      urlContext: true,
+    });
+
+    const createCall = (createSpy as Mock).mock.calls[0][0];
+    expect(createCall.model).toBe('kris-500/models/gemini-3.8-flash');
+    expect(createCall.reasoning_effort).toBe('high');
+    expect(createCall).not.toHaveProperty('thinkingLevel');
+    expect(createCall).not.toHaveProperty('urlContext');
+    expect(createCall.frequency_penalty).toBeUndefined();
   });
 });

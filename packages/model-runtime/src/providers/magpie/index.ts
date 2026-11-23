@@ -5,12 +5,23 @@ import OpenAI from 'openai';
 
 import type { OpenAICompatibleFactoryOptions } from '../../core/openaiCompatible';
 import { createOpenAICompatibleRuntime } from '../../core/openaiCompatible';
+import type { ChatStreamPayload } from '../../types';
 import { processMultiProviderModelList } from '../../utils/modelParse';
 
 type ModelSettings = NonNullable<ChatModelCard['settings']>;
 
 /** The params that set how hard a model thinks, which a `reasoning: false` card must not offer. */
 const REASONING_PARAMS = new Set<string>(MODEL_REASONING_EXTEND_PARAMS);
+
+/** Vendor-specific extendParams whose wire shape Magpie's unified `/v1/chat/completions` does not support. */
+const UNSUPPORTED_EXTEND_PARAMS = new Set<string>([
+  'disableContextCaching',
+  'imageAspectRatio',
+  'imageAspectRatio2',
+  'imageResolution',
+  'imageResolution2',
+  'urlContext',
+]);
 
 /**
  * One row of magpie's `GET /v1/models`.
@@ -186,8 +197,10 @@ const knownSettings = (
   const extendParams: ModelSettings['extendParams'] = known?.settings?.extendParams;
   const disabledParams: ModelSettings['disabledParams'] = known?.settings?.disabledParams;
 
-  const usable =
-    thinks === false ? extendParams?.filter((param) => !REASONING_PARAMS.has(param)) : extendParams;
+  const usable = extendParams?.filter(
+    (param) =>
+      !UNSUPPORTED_EXTEND_PARAMS.has(param) && (thinks !== false || !REASONING_PARAMS.has(param)),
+  );
 
   if (!usable?.length && !disabledParams) return {};
 
@@ -256,9 +269,70 @@ const fetchMagpieModels = async (client: OpenAI): Promise<ChatModelCard[]> => {
   return processMultiProviderModelList(unique, ModelProvider.Magpie);
 };
 
+const mapBudgetTokensToReasoningEffort = (
+  budgetTokens: number,
+): ChatStreamPayload['reasoning_effort'] => {
+  if (budgetTokens <= 0) return 'none';
+  if (budgetTokens <= 2048) return 'low';
+  if (budgetTokens <= 8192) return 'medium';
+  return 'high';
+};
+
+/**
+ * Normalizes LobeHub extend params onto Magpie's unified OpenAI-compatible
+ * `/v1/chat/completions` contract (`reasoning_effort`), stripping vendor-only
+ * fields (`thinkingLevel`, `thinking`, `effort`, `thinkingBudget`, `urlContext`,
+ * etc.) that upstream gateways reject as unknown JSON fields.
+ */
+export const handleMagpieChatCompletionPayload = (payload: ChatStreamPayload) => {
+  const {
+    effort,
+    enabledContextCaching: _enabledContextCaching,
+    enabledSearch: _enabledSearch,
+    imageAspectRatio: _imageAspectRatio,
+    imageResolution: _imageResolution,
+    reasoning,
+    reasoning_effort,
+    thinking,
+    thinkingBudget,
+    thinkingLevel,
+    urlContext: _urlContext,
+    ...rest
+  } = payload;
+
+  let resolvedReasoningEffort = reasoning_effort;
+
+  if (!resolvedReasoningEffort) {
+    if (thinking?.type === 'disabled') {
+      resolvedReasoningEffort = 'none';
+    } else if (thinkingLevel) {
+      resolvedReasoningEffort = thinkingLevel as ChatStreamPayload['reasoning_effort'];
+    } else if (effort) {
+      resolvedReasoningEffort = effort as ChatStreamPayload['reasoning_effort'];
+    } else if (typeof thinkingBudget === 'number') {
+      if (thinkingBudget >= 0) {
+        resolvedReasoningEffort = mapBudgetTokensToReasoningEffort(thinkingBudget);
+      }
+    } else if (typeof thinking?.budget_tokens === 'number') {
+      resolvedReasoningEffort = mapBudgetTokensToReasoningEffort(thinking.budget_tokens);
+    } else if (typeof reasoning?.effort === 'string') {
+      resolvedReasoningEffort = reasoning.effort as ChatStreamPayload['reasoning_effort'];
+    }
+  }
+
+  return {
+    ...rest,
+    ...(resolvedReasoningEffort && { reasoning_effort: resolvedReasoningEffort }),
+    stream: payload.stream ?? true,
+  } as any;
+};
+
 export const params = {
   apiKey: 'placeholder-to-avoid-error',
   baseURL: `${DEFAULT_BASE_URL}/v1`,
+  chatCompletion: {
+    handlePayload: handleMagpieChatCompletionPayload,
+  },
   customClient: {
     // The gateway names the caller by its key (`magpie-<app>`) or else by its
     // User-Agent. The OpenAI SDK builds one from its class name, which a
