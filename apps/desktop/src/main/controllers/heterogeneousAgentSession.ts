@@ -43,6 +43,7 @@ import {
   TraeAcpSession,
 } from '@lobechat/heterogeneous-agents/spawn';
 import type {
+  CodexCollaborationMode,
   HeterogeneousServerDefaultApiConfig,
   HeteroPermissionMode,
   HeteroSessionImportMessage,
@@ -66,6 +67,11 @@ export interface SendPromptParams {
   agentId?: string;
   /** Assistant row this run streams into — recorded so recovery can scope to its branch. */
   assistantMessageId?: string;
+  /**
+   * (Codex) The Plan switch: the collaboration
+   * mode every native app-server turn sends. Absent sends none.
+   */
+  collaborationMode?: CodexCollaborationMode;
   /** Image attachments to include in the prompt (downloaded from url, cached by id) */
   imageList?: HeterogeneousAgentImageAttachment[];
   /**
@@ -75,9 +81,9 @@ export interface SendPromptParams {
    */
   operationId: string;
   /**
-   * (Claude Code, Better Coding Experience lab) Permission mode the run starts
-   * in; Claude Code then asks before acting as the mode requires and each
-   * request raises a card. Absent: every action is allowed, as before the lab.
+   * (Claude Code) Permission mode the run starts in; Claude Code then asks
+   * before acting as the mode requires and each request raises a card.
+   * Absent (an older renderer): every action is allowed.
    */
   permissionMode?: HeteroPermissionMode;
   prompt: string;
@@ -932,6 +938,11 @@ export interface GetSessionInfoParams {
 
 export interface SetPermissionModeParams {
   mode: HeteroPermissionMode;
+  sessionId: string;
+}
+
+export interface SetCollaborationModeParams {
+  mode: CodexCollaborationMode;
   sessionId: string;
 }
 
