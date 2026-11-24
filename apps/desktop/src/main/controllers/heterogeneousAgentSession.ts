@@ -7,7 +7,6 @@ import type { AskUserBridge, AskUserBridgeOptions } from '@lobechat/heterogeneou
 import { buildHeterogeneousPrompt } from '@lobechat/heterogeneous-agents/protocol';
 import type { PiRpcSession } from '@lobechat/heterogeneous-agents/rpc';
 import type {
-  AntigravityLiveInput,
   ClaudeAgentSdkSession,
   ClaudeCodeLiveInput,
   CodexThreadSession,
@@ -16,7 +15,7 @@ import type {
 import {
   AcpRpcResponseError,
   AntigravityAcpSession,
-  buildAntigravityAcpArgs,
+  buildAntigravityAcpLaunch,
   buildAntigravityAcpPrompt,
   buildCopilotAcpArgs,
   buildCopilotAcpPrompt,
@@ -138,6 +137,7 @@ export interface SendPromptParams {
 export interface AgentSession {
   agentSessionId?: string;
   agentType: HeterogeneousAgentType;
+  /** Active Antigravity ACP run; follow-ups are steered into it. */
   antigravityAcpSession?: AntigravityAcpSession;
   appServerSession?: CodexThreadSession;
   args: string[];
@@ -162,8 +162,8 @@ export interface AgentSession {
   env?: Record<string, string>;
   grokAcpSession?: GrokAcpSession;
   hostedProviderBinding?: HostedProviderBinding;
-  /** Open input of a live CLI run (Claude Code or Antigravity). */
-  liveInput?: AntigravityLiveInput | ClaudeCodeLiveInput;
+  /** Open input of a live CLI run (Claude Code). */
+  liveInput?: ClaudeCodeLiveInput;
   model?: string;
   modelSource?: string;
   modelVerificationLastAttemptAt?: number;
@@ -238,12 +238,9 @@ export const getAcpResumeError = (
       agentType: 'antigravity',
       code: HeterogeneousAgentSessionErrorCode.ResumeThreadNotFound,
       command: session.command,
-      details: {
-        code: error.rpcError.code,
-        data: error.rpcError.data,
-      },
+      details: { code: error.rpcError.code, message: error.rpcError.message },
       message:
-        'The saved Antigravity session could not be found, so a new conversation will start.',
+        'The saved Antigravity conversation could not be found, so a new conversation will start.',
       resumeSessionId: session.resumeSessionId,
       stderr: error.message,
       workingDirectory: session.cwd,
@@ -666,7 +663,7 @@ export const sendPromptWithAcpSession = async (
     const prompt = await buildAntigravityAcpPrompt(promptInput, { cacheDir: host.fileCacheDir });
     const tracePayload = `${JSON.stringify(prompt)}\n`;
     const traceSession = await host.createCliTraceSession({
-      cliArgs: buildAntigravityAcpArgs(session.args),
+      cliArgs: buildAntigravityAcpLaunch(session.args).args,
       cwd,
       imageList: params.imageList ?? [],
       session,
@@ -677,9 +674,14 @@ export const sendPromptWithAcpSession = async (
       await host.completeCancelledSessionBeforeLaunch(session);
       return;
     }
+    const intervention = host.setupAcpInterventionForOp(
+      params.operationId,
+      session.sessionId,
+      'antigravity',
+    );
     const antigravityAcpSession = new AntigravityAcpSession({
       ...createCommonOptions(traceSession),
-      initialModel: session.model,
+      askUserBridge: intervention.bridge,
       onModel: (model) => {
         session.model = model;
         session.modelSource = 'antigravity-acp';
@@ -690,9 +692,7 @@ export const sendPromptWithAcpSession = async (
     await runInteractiveAcpSession(host, {
       acpSession: antigravityAcpSession,
       activeSessionKey: 'antigravityAcpSession',
-      cleanup: async () => {
-        await session.hostedProviderBinding?.cleanup();
-      },
+      cleanup: intervention.cleanup,
       isResumeError: isAntigravityAcpSessionNotFoundError,
       session,
       stderrChunks,

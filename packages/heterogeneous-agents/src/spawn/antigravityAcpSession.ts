@@ -1,6 +1,6 @@
-import type { HeterogeneousAgentModel } from '@lobechat/types';
-import { isRecord, pickString } from '@lobechat/utils/object';
+import { isRecord } from '@lobechat/utils/object';
 
+import type { AskUserBridge } from '../askUser/AskUserBridge';
 import type { AgentPromptInput } from '../protocol';
 import type { AcpAgentSessionOptions } from './acpAgentSession';
 import {
@@ -10,178 +10,30 @@ import {
 } from './acpAgentSession';
 import type { AcpRpcMessage } from './acpStdioClient';
 import { AcpRpcResponseError, AcpServerRequestError } from './acpStdioClient';
-import { getAntigravitySpawnEnv } from './antigravity';
+import { buildAntigravityAcpLaunch } from './antigravity';
+import {
+  buildAntigravityElicitationResponse,
+  parseAntigravityQuestions,
+} from './antigravityAcpElicitation';
 import type { BuildAgentInputOptions } from './input';
-import { normalizeImage } from './input';
-import type {
-  TraeAcpImagePromptBlock,
-  TraeAcpPromptBlock,
-  TraeAcpTextPromptBlock,
-} from './traeAcpSession';
+import type { TraeAcpPromptBlock } from './traeAcpSession';
+import { buildTraeAcpPrompt } from './traeAcpSession';
 
 const TRANSPORT = 'antigravity-acp' as const;
 
-export type AntigravityAcpTextPromptBlock = TraeAcpTextPromptBlock;
-export type AntigravityAcpImagePromptBlock = TraeAcpImagePromptBlock;
 export type AntigravityAcpPromptBlock = TraeAcpPromptBlock;
-
-const CONFLICTING_FLAGS = new Set([
-  '--',
-  '--continue',
-  '--conversation',
-  '--input-format',
-  '--output-format',
-  '--print',
-  '--prompt',
-  '--prompt-interactive',
-  '--remote-control',
-  '-c',
-  '-i',
-  '-p',
-]);
-
-interface ExtractedAntigravitySessionFlags {
-  args: string[];
-  effort?: string;
-  mode?: string;
-  model?: string;
-}
-
-const extractAntigravitySessionFlags = (
-  extraArgs: string[] = [],
-): ExtractedAntigravitySessionFlags => {
-  const args: string[] = [];
-  let effort: string | undefined;
-  let mode: string | undefined;
-  let model: string | undefined;
-
-  for (let index = 0; index < extraArgs.length; index += 1) {
-    const arg = extraArgs[index]!;
-    const flagName = arg.split('=')[0]!;
-    if (CONFLICTING_FLAGS.has(flagName)) {
-      throw new Error(`LobeHub manages Antigravity's prompt, output and session flags: ${arg}`);
-    }
-    if (arg === 'acp' || arg === '--stdio') continue;
-
-    if (arg === '--model' || arg === '-m') {
-      const value = extraArgs[index + 1];
-      if (value && !value.startsWith('-')) {
-        model = value;
-        index += 1;
-      }
-      continue;
-    }
-    if (arg.startsWith('--model=')) {
-      model = arg.slice('--model='.length);
-      continue;
-    }
-    if (arg.startsWith('-m=')) {
-      model = arg.slice('-m='.length);
-      continue;
-    }
-
-    if (arg === '--effort') {
-      const value = extraArgs[index + 1];
-      if (value && !value.startsWith('-')) {
-        effort = value;
-        index += 1;
-      }
-      continue;
-    }
-    if (arg.startsWith('--effort=')) {
-      effort = arg.slice('--effort='.length);
-      continue;
-    }
-
-    if (arg === '--mode') {
-      const value = extraArgs[index + 1];
-      if (value && !value.startsWith('-')) {
-        mode = value;
-        index += 1;
-      }
-      continue;
-    }
-    if (arg.startsWith('--mode=')) {
-      mode = arg.slice('--mode='.length);
-      continue;
-    }
-
-    args.push(arg);
-  }
-
-  return { args, effort, mode, model };
-};
-
-export const buildAntigravityAcpArgs = (extraArgs: string[] = []): string[] => {
-  const { args } = extractAntigravitySessionFlags(extraArgs);
-  const fullAccess = args.includes('--dangerously-skip-permissions')
-    ? []
-    : ['--dangerously-skip-permissions'];
-  return ['acp', ...fullAccess, ...args];
-};
-
-export const buildAntigravityAcpPrompt = async (
-  prompt: AgentPromptInput,
-  options: BuildAgentInputOptions = {},
-): Promise<AntigravityAcpPromptBlock[]> => {
-  const blocks = typeof prompt === 'string' ? [{ text: prompt, type: 'text' as const }] : prompt;
-  const result: AntigravityAcpPromptBlock[] = [];
-  for (const block of blocks) {
-    if (block.type === 'text') {
-      if (block.text.length > 0 || blocks.length === 1) {
-        result.push({ text: block.text, type: 'text' });
-      }
-    } else {
-      const image = await normalizeImage(block.source, options);
-      result.push({
-        data: image.buffer.toString('base64'),
-        mimeType: image.mediaType,
-        type: 'image',
-      });
-    }
-  }
-  return result;
-};
-
-export const isAntigravityAcpSessionNotFoundError = (
-  error: unknown,
-): error is AcpRpcResponseError => {
-  if (
-    !(error instanceof AcpRpcResponseError) ||
-    (error.method !== 'session/resume' && error.method !== 'session/load')
-  ) {
-    return false;
-  }
-
-  const data = isRecord(error.rpcError.data) ? error.rpcError.data : undefined;
-  const details = typeof data?.details === 'string' ? data.details : '';
-  const combined = `${error.rpcError.message} ${details}`;
-  return /failed to read session\b|\bsession\b[\s\S]*?\bnot found|trajectory not found/i.test(
-    combined,
-  );
-};
 
 interface AntigravityAcpInitializeResult {
   agentCapabilities?: {
-    load_session?: boolean;
-    loadSession?: boolean;
     promptCapabilities?: { image?: boolean };
-    session_capabilities?: { close?: unknown; resume?: unknown };
-    sessionCapabilities?: { close?: unknown; resume?: unknown };
+    sessionCapabilities?: { resume?: unknown };
   };
   protocolVersion?: number | string;
 }
 
 interface AntigravityAcpSessionResult {
   configOptions?: unknown;
-  models?: {
-    availableModels?: unknown;
-    currentModelId?: unknown;
-  };
-  modes?: {
-    availableModes?: unknown;
-    currentModeId?: unknown;
-  };
+  models?: { availableModels?: unknown };
   sessionId?: string;
 }
 
@@ -190,356 +42,447 @@ interface AntigravityAcpPromptResult {
   usage?: unknown;
 }
 
-interface AntigravityAcpConfigOption {
-  category?: unknown;
-  currentValue?: unknown;
-  id?: unknown;
-  name?: unknown;
-  options?: unknown;
-  type?: unknown;
-  value?: unknown;
+/** A follow-up written to agy that the run has not confirmed as read yet. */
+interface UnconfirmedSteer {
+  /** Its position among the run's prompts (the first prompt is 0). */
+  index: number;
+  uuid: string;
 }
+
+const USAGE_FIELDS = ['inputTokens', 'outputTokens', 'cachedReadTokens', 'thoughtTokens'] as const;
+
+type UsageTotals = Record<(typeof USAGE_FIELDS)[number], number>;
+
+const findConfigOption = (configOptions: unknown, id: string) =>
+  Array.isArray(configOptions)
+    ? configOptions.find((value) => isRecord(value) && value.id === id)
+    : undefined;
+
+const configValue = (configOptions: unknown, id: string): string | undefined => {
+  const option = findConfigOption(configOptions, id);
+  return isRecord(option) && typeof option.currentValue === 'string'
+    ? option.currentValue
+    : undefined;
+};
+
+/** Values of a select option, flattening grouped options. */
+const configOptionValues = (configOptions: unknown, id: string): string[] => {
+  const option = findConfigOption(configOptions, id);
+  const collect = (entries: unknown): string[] =>
+    Array.isArray(entries)
+      ? entries.flatMap((entry) => {
+          if (!isRecord(entry)) return [];
+          if (Array.isArray(entry.options)) return collect(entry.options);
+          return typeof entry.value === 'string' ? [entry.value] : [];
+        })
+      : [];
+  return isRecord(option) ? collect(option.options) : [];
+};
+
+const availableModelIds = (result: AntigravityAcpSessionResult): Set<string> => {
+  const models = result.models?.availableModels;
+  return new Set(
+    Array.isArray(models)
+      ? models.flatMap((model) =>
+          isRecord(model) && typeof model.modelId === 'string' ? [model.modelId] : [],
+        )
+      : [],
+  );
+};
+
+/**
+ * The `model` value agy takes for a selection. The selector groups `agy models`
+ * slugs into a model and an effort (`gpt-oss-120b` + `medium`), but a model
+ * whose thinking tier is fixed only exists under its full slug
+ * (`gpt-oss-120b-medium`).
+ */
+const resolveModelValue = (
+  model: string,
+  effort: string | undefined,
+  sessionResult: AntigravityAcpSessionResult,
+): string => {
+  const known = new Set([
+    ...configOptionValues(sessionResult.configOptions, 'model'),
+    ...availableModelIds(sessionResult),
+  ]);
+  if (known.size === 0 || known.has(model)) return model;
+  if (effort && known.has(`${model}-${effort}`)) return `${model}-${effort}`;
+  const variants = [...known].filter((id) => id.startsWith(`${model}-`));
+  return variants.length === 1 ? variants[0] : model;
+};
 
 export interface AntigravityAcpSessionOptions extends AcpAgentSessionOptions {
-  initialModel?: string;
-  inputOptions?: BuildAgentInputOptions;
+  askUserBridge?: AskUserBridge;
   onModel?: (model: string) => void;
-  prompt: AgentPromptInput | AntigravityAcpPromptBlock[];
+  prompt: AntigravityAcpPromptBlock[];
 }
 
-const parseAvailableModels = (raw: unknown): HeterogeneousAgentModel[] => {
-  if (!Array.isArray(raw)) return [];
-  const seen = new Set<string>();
-  const models: HeterogeneousAgentModel[] = [];
-  for (const item of raw) {
-    if (!isRecord(item)) continue;
-    const id = pickString(item.modelId);
-    if (!id || seen.has(id)) continue;
-    seen.add(id);
-    const name = pickString(item.name);
-    models.push({
-      id,
-      ...(name && name !== id ? { label: name } : {}),
-      modelId: id,
-      providerId: 'antigravity',
-    });
-  }
-  return models;
+export const buildAntigravityAcpPrompt = (
+  prompt: AgentPromptInput,
+  options: BuildAgentInputOptions = {},
+): Promise<AntigravityAcpPromptBlock[]> => buildTraeAcpPrompt(prompt, options);
+
+/** The response to a `session/prompt`: it carries a stop reason, or failed as one. */
+const isPromptResponse = (message: AcpRpcMessage): boolean => {
+  if (message.method !== undefined || message.id === undefined) return false;
+  if (message.error) return message.requestMethod === 'session/prompt';
+  return isRecord(message.result) && 'stopReason' in message.result;
 };
 
-const findConfigOption = (
-  configOptions: unknown,
-  predicate: (option: AntigravityAcpConfigOption) => boolean,
-): AntigravityAcpConfigOption | undefined => {
-  if (!Array.isArray(configOptions)) return undefined;
-  return configOptions
-    .filter(isRecord)
-    .find((option) => predicate(option as AntigravityAcpConfigOption)) as
-    AntigravityAcpConfigOption | undefined;
-};
+// agy can send its quota rejection as a complete ACP text chunk and return
+// end_turn. Match the standalone notice so ordinary prose stays in the chat.
+const QUOTA_NOTICE =
+  /^(?:⚠️?\s*)?Individual quota reached\.\s+Please upgrade your subscription to increase your limits\.(?:\s+Resets in (?:\d+[dhms]\s*)+\.?)?$/i;
 
-const resolveModelFromConfigOptions = (
-  configOptions: unknown,
-  availableModelIds: ReadonlySet<string>,
-): string | undefined => {
-  const modelOption = findConfigOption(
-    configOptions,
-    (opt) => opt.id === 'model' || opt.category === 'model',
-  );
-  const family = pickString(modelOption?.currentValue);
-  if (!family) return undefined;
+/** `session/resume` and `session/load` both failed to find the saved conversation. */
+export const isAntigravityAcpSessionNotFoundError = (
+  error: unknown,
+): error is AcpRpcResponseError =>
+  error instanceof AcpRpcResponseError &&
+  error.method === 'session/load' &&
+  /session not found/i.test(error.rpcError.message ?? '');
 
-  const thoughtOption = findConfigOption(
-    configOptions,
-    (opt) => opt.id === 'thought_level' || opt.category === 'thought_level',
-  );
-  const thoughtLevel = pickString(thoughtOption?.currentValue);
-  if (thoughtLevel) {
-    const combined = `${family}-${thoughtLevel}`;
-    if (availableModelIds.has(combined)) return combined;
-  }
-  return family;
-};
-
+/**
+ * Antigravity over `agy acp`. One run is one user turn; a message the user
+ * sends while it runs is steered in with another `session/prompt`: agy ends
+ * the pending prompt (`end_turn`) and carries on with the new one inside the
+ * same work. The run ends when the latest prompt settles.
+ */
 export class AntigravityAcpSession extends AcpAgentSession<
   AntigravityAcpInitializeResult,
   AntigravityAcpSessionOptions
 > {
+  /** Session updates before the prompt (a `session/load` replay) are history, not output. */
   private acceptUpdates = false;
-  private availableModelIds = new Set<string>();
-  private canCloseSession = false;
-  private readonly effortFromArgs?: string;
-  private readonly modeFromArgs?: string;
-  private readonly modelFromArgs?: string;
-  private resolvedPrompt: AntigravityAcpPromptBlock[] = [];
+  private readonly launch: ReturnType<typeof buildAntigravityAcpLaunch>;
+  private writingAnswer = false;
+  /** Prompt responses handled so far, in stdout order. */
+  private promptResponses = 0;
+  /** Steered prompts written to agy, in order, that the run has not settled yet. */
+  private readonly steers: Promise<AntigravityAcpPromptResult>[] = [];
+  private steerCount = 0;
+  private steerable = false;
+  private readonly unconfirmedSteers: UnconfirmedSteer[] = [];
+  private usage: UsageTotals = {
+    cachedReadTokens: 0,
+    inputTokens: 0,
+    outputTokens: 0,
+    thoughtTokens: 0,
+  };
 
   constructor(options: AntigravityAcpSessionOptions) {
-    const extracted = extractAntigravitySessionFlags(options.args);
-    super(
-      { ...options, env: getAntigravitySpawnEnv(options.env) },
-      {
-        args: buildAntigravityAcpArgs(options.args),
-        pipeline: { agentType: 'antigravity-acp', cwd: options.cwd },
-        processLabel: 'Antigravity ACP',
-        transport: TRANSPORT,
-      },
-    );
-    this.effortFromArgs = extracted.effort;
-    this.modeFromArgs = extracted.mode;
-    this.modelFromArgs = extracted.model;
+    const launch = buildAntigravityAcpLaunch(options.args);
+    super(options, {
+      args: launch.args,
+      pipeline: { agentType: 'antigravity', cwd: options.cwd },
+      processLabel: 'Antigravity ACP',
+      transport: TRANSPORT,
+    });
+    this.launch = launch;
   }
 
   get sessionId(): string | undefined {
     return this.acpSessionId;
   }
 
-  /** Spawn the ACP child process eagerly (idempotent with `run()`). */
-  startProcess(): Promise<void> {
-    return this.client.start();
+  /**
+   * Write a user message into the running turn. `false` when the run takes no
+   * input now (not prompting yet, writing an answer, interrupted, or settling):
+   * nothing was written, so the message can wait for the next run. agy confirms it read
+   * the message when the prompt it interrupts returns, reported as
+   * `step_complete { phase: 'user_message', uuid }`.
+   */
+  steer(prompt: AntigravityAcpPromptBlock[], uuid: string): boolean {
+    const sessionId = this.acpSessionId;
+    if (
+      !this.steerable ||
+      !sessionId ||
+      this.closedByHost ||
+      this.writingAnswer ||
+      this.promptResponses > this.steerCount
+    )
+      return false;
+
+    const result = this.client.request<AntigravityAcpPromptResult>(
+      'session/prompt',
+      { prompt, sessionId },
+      false,
+    );
+    // Settled in order by `settlePrompt`; a closed transport must not surface
+    // as an unhandled rejection before the run gets to it.
+    result.catch(() => {});
+    this.steers.push(result);
+
+    this.unconfirmedSteers.push({ index: ++this.steerCount, uuid });
+    return true;
   }
 
-  protected async prepareRun(): Promise<void> {
-    this.resolvedPrompt = await this.resolvePrompt();
+  override interrupt(): void {
+    this.steerable = false;
+    super.interrupt();
   }
 
   protected buildInitializeParams(): unknown {
     return {
-      clientCapabilities: { fs: { readTextFile: false, writeTextFile: false }, terminal: false },
-      clientInfo: {
-        name: 'lobehub',
-        title: 'LobeHub',
-        version: this.options.clientVersion,
+      clientCapabilities: {
+        ...(this.options.askUserBridge && { elicitation: { form: {} } }),
+        fs: { readTextFile: false, writeTextFile: false },
+        terminal: false,
       },
+      clientInfo: { name: 'lobehub', title: 'LobeHub', version: this.options.clientVersion },
       protocolVersion: ACP_PROTOCOL_VERSION,
     };
   }
 
   protected validateInitialized(initialized: AntigravityAcpInitializeResult): void {
     if (
-      initialized?.protocolVersion !== undefined &&
       initialized.protocolVersion !== ACP_PROTOCOL_VERSION &&
       initialized.protocolVersion !== String(ACP_PROTOCOL_VERSION)
     ) {
       throw new Error(
-        `Antigravity ACP returned unsupported protocol version: ${String(initialized?.protocolVersion)}`,
+        `Antigravity ACP returned unsupported protocol version: ${String(initialized.protocolVersion)}`,
+      );
+    }
+    if (
+      this.options.prompt.some((block) => block.type === 'image') &&
+      initialized.agentCapabilities?.promptCapabilities?.image !== true
+    ) {
+      throw new Error(
+        'This Antigravity CLI does not accept images over ACP. Update agy and retry.',
       );
     }
   }
 
   protected async establishSession(initialized: AntigravityAcpInitializeResult): Promise<string> {
-    const capabilities = initialized?.agentCapabilities;
-    if (
-      this.resolvedPrompt.some((block) => block.type === 'image') &&
-      capabilities?.promptCapabilities?.image !== true
-    ) {
-      throw new Error(
-        'Antigravity ACP does not support image prompt blocks. Update agy and retry.',
-      );
-    }
-
-    const supportsResume =
-      isRecord(capabilities?.sessionCapabilities?.resume) ||
-      isRecord(capabilities?.session_capabilities?.resume);
-    const supportsLoad = capabilities?.loadSession === true || capabilities?.load_session === true;
-    if (this.options.resumeSessionId && !supportsResume && !supportsLoad) {
-      throw new Error('Antigravity ACP does not support resuming sessions');
-    }
-
-    this.canCloseSession =
-      isRecord(capabilities?.sessionCapabilities?.close) ||
-      isRecord(capabilities?.session_capabilities?.close);
-
-    const sessionMethod = this.options.resumeSessionId
-      ? supportsResume
-        ? 'session/resume'
-        : 'session/load'
-      : 'session/new';
-    const sessionResult = await this.client.request<AntigravityAcpSessionResult>(sessionMethod, {
-      cwd: this.options.cwd,
-      mcpServers: [],
-      ...(this.options.resumeSessionId ? { sessionId: this.options.resumeSessionId } : {}),
-    });
-
-    const sessionId = sessionResult?.sessionId ?? this.options.resumeSessionId;
+    const sessionResult = await this.openSession(initialized);
+    const sessionId = sessionResult.sessionId ?? this.options.resumeSessionId;
     if (!sessionId) throw new Error('Antigravity ACP returned no session id');
-    this.acpSessionId = sessionId;
-    this.options.onSessionId(sessionId);
 
-    const availableModels = parseAvailableModels(sessionResult?.models?.availableModels);
-    this.availableModelIds = new Set(availableModels.map(({ id }) => id));
-
-    let model = await this.applyInitialModel(sessionId, sessionResult, availableModels);
-    if (this.effortFromArgs?.trim() && this.effortFromArgs.trim() !== 'default') {
-      const effort = this.effortFromArgs.trim();
-      const response = await this.client.request<{ configOptions?: unknown }>(
-        'session/set_config_option',
-        {
-          configId: 'thought_level',
-          sessionId,
-          value: effort,
-        },
-      );
-      model =
-        resolveModelFromConfigOptions(response?.configOptions, this.availableModelIds) ?? model;
-    }
-
-    if (this.modeFromArgs?.trim()) {
-      await this.client.request('session/set_mode', {
-        modeId: this.modeFromArgs.trim(),
-        sessionId,
-      });
-    }
-
+    const model = await this.applySessionConfig(sessionId, sessionResult);
     if (model) {
       this.pipeline.configureSession({ model });
       this.options.onModel?.(model);
     }
+    this.options.onSessionId(sessionId);
     await this.pushToPipeline({ model, sessionId, type: 'antigravity_session' });
     return sessionId;
   }
 
   protected onBeforePrompt(): void {
     this.acceptUpdates = true;
+    this.steerable = true;
   }
 
   protected buildPromptParams(sessionId: string): unknown {
-    return { prompt: this.resolvedPrompt, sessionId };
+    return { prompt: this.options.prompt, sessionId };
   }
 
+  /**
+   * The first prompt settled; settle every message steered in after it, in
+   * order. Each was confirmed as read when the prompt before it returned.
+   */
   protected override async settlePrompt(result: unknown): Promise<void> {
-    await this.client.drain();
-    const promptResult = isRecord(result) ? (result as AntigravityAcpPromptResult) : undefined;
-    await this.pushToPipeline({
-      stopReason: promptResult?.stopReason,
-      type: 'antigravity_prompt_completed',
-      usage: promptResult?.usage,
-    });
-    if (this.canCloseSession && this.acpSessionId && !this.closedByHost) {
-      await this.client
-        .request('session/close', { sessionId: this.acpSessionId })
-        .catch((error) => {
-          console.error('[AntigravityAcpSession] Failed to close ACP session cleanly:', error);
-        });
+    let last = (isRecord(result) ? result : {}) as AntigravityAcpPromptResult;
+    this.addUsage(last.usage);
+    for (;;) {
+      await this.client.drain();
+      const next = this.steers.shift();
+      if (!next) break;
+      last = await next;
+      this.addUsage(last.usage);
     }
+    this.steerable = false;
+
+    const used = Object.values(this.usage).some((value) => value > 0);
+    await this.pushToPipeline({
+      stopReason: last.stopReason,
+      type: 'antigravity_prompt_completed',
+      ...(used && { usage: { ...this.usage } }),
+    });
   }
 
   protected async onRunFailure(error: Error): Promise<void> {
-    const detail =
-      error instanceof AcpRpcResponseError &&
-      isRecord(error.rpcError.data) &&
-      typeof error.rpcError.data.details === 'string' &&
-      error.rpcError.data.details
-        ? `${error.message}: ${error.rpcError.data.details}`
-        : error.message;
-    await this.pushToPipeline({ message: detail, type: 'antigravity_error' });
+    this.steerable = false;
+    await this.pushToPipeline({ message: error.message, type: 'antigravity_error' });
     await this.emitEvents(await this.pipeline.flush());
   }
 
   protected async onRunCancelled(): Promise<void> {
+    this.steerable = false;
     await this.pushToPipeline({ stopReason: 'cancelled', type: 'antigravity_prompt_completed' });
   }
 
+  protected onHostClose(): void {
+    this.steerable = false;
+  }
+
   protected async handleAgentMessage(message: AcpRpcMessage): Promise<void> {
-    if (message.method !== 'session/update' || !this.acceptUpdates) return;
-
-    const update = isRecord(message.params) ? message.params.update : undefined;
-    if (!isRecord(update)) return;
-
-    if (update.sessionUpdate === 'config_option_update') {
-      const currentModel = resolveModelFromConfigOptions(
-        update.configOptions,
-        this.availableModelIds,
-      );
-      if (currentModel) {
-        this.pipeline.configureSession({ model: currentModel });
-        this.options.onModel?.(currentModel);
+    if (isPromptResponse(message)) {
+      // Each steer ends the prompt before it, so this is when agy read the
+      // next one. Confirm it here, in stdout order, so the answer to it that
+      // follows in the same output opens a step of its own.
+      this.promptResponses += 1;
+      this.writingAnswer = false;
+      const next = this.unconfirmedSteers[0];
+      if (!message.error && next && next.index <= this.promptResponses) {
+        this.unconfirmedSteers.shift();
+        await this.pushToPipeline({ type: 'antigravity_user_message', uuid: next.uuid });
       }
+      return;
     }
-    await this.pushToPipeline(update);
-  }
-
-  protected handleServerRequest(message: AcpRpcMessage): unknown {
-    if (message.method === 'session/request_permission') {
-      const optionId = selectAcpPermissionOption(message.params, [
-        (option) =>
-          option.optionId === 'allow_session' ||
-          option.optionId === 'allow_always' ||
-          option.optionId === 'approve_for_session',
-        (option) => option.kind === 'allow_always',
-        (option) => option.kind === 'allow_once',
-        (option) => option.kind === 'reject_once',
-      ]);
-      if (optionId) return { outcome: { optionId, outcome: 'selected' } };
-      throw new AcpServerRequestError(-32_603, 'No safe permission option was offered');
+    if (!this.acceptUpdates || message.method !== 'session/update') return;
+    const params = isRecord(message.params) ? message.params : undefined;
+    if (!isRecord(params?.update)) return;
+    // Subagent conversations must never leak into the parent's assistant bubble.
+    if (typeof params.sessionId === 'string' && params.sessionId !== this.acpSessionId) return;
+    // agy starts the raw tool before the form request, whose schema supplies
+    // the arguments for the same card. A terminal update still closes it or
+    // shows the original tool when agy fell back to asking in chat.
+    const { content, name, sessionUpdate, status } = params.update;
+    if (sessionUpdate === 'agent_message_chunk' && isRecord(content) && content.type === 'text') {
+      const text = typeof content.text === 'string' ? content.text.trim() : '';
+      if (QUOTA_NOTICE.test(text)) throw new Error(text);
+      // The updates only identify the session. Leave the next prompt queued
+      // while agy is writing an answer so its remaining text stays on this turn.
+      if (text) this.writingAnswer = true;
+    } else if (sessionUpdate === 'tool_call') {
+      this.writingAnswer = false;
     }
-    throw new AcpServerRequestError(-32_601, `Unsupported ACP client request: ${message.method}`);
-  }
-
-  private async resolvePrompt(): Promise<AntigravityAcpPromptBlock[]> {
-    const prompt = this.options.prompt;
     if (
-      Array.isArray(prompt) &&
-      prompt.every(
-        (block) =>
-          'type' in block && (block.type === 'text' || ('data' in block && block.type === 'image')),
-      )
-    ) {
-      return prompt as AntigravityAcpPromptBlock[];
-    }
-    return buildAntigravityAcpPrompt(prompt as AgentPromptInput, this.options.inputOptions);
+      this.options.askUserBridge &&
+      name === 'ask_question' &&
+      (sessionUpdate === 'tool_call' || sessionUpdate === 'tool_call_update') &&
+      (status === 'in_progress' || status === 'pending' || status === undefined)
+    )
+      return;
+    await this.pushToPipeline(params.update);
   }
 
-  private async applyInitialModel(
-    sessionId: string,
-    sessionResult: AntigravityAcpSessionResult | undefined,
-    availableModels: HeterogeneousAgentModel[],
-  ): Promise<string | undefined> {
-    const currentModelId = pickString(sessionResult?.models?.currentModelId);
-    const requestedModel = (this.options.initialModel?.trim() || this.modelFromArgs?.trim()) ?? '';
-    if (!requestedModel || requestedModel === 'default') {
-      return (
-        currentModelId ??
-        resolveModelFromConfigOptions(sessionResult?.configOptions, this.availableModelIds)
-      );
+  /**
+   * `--dangerously-skip-permissions` makes agy approve tools itself; should it
+   * still ask, approve as the print-mode runs did.
+   */
+  protected handleServerRequest(message: AcpRpcMessage): unknown {
+    if (message.method === 'elicitation/create') return this.handleElicitation(message.params);
+    if (message.method !== 'session/request_permission') {
+      throw new AcpServerRequestError(-32_601, `Unsupported ACP client request: ${message.method}`);
     }
+    const optionId = selectAcpPermissionOption(message.params, [
+      (option) => option.kind === 'allow_always',
+      (option) => option.kind === 'allow_once',
+    ]);
+    return optionId
+      ? { outcome: { optionId, outcome: 'selected' } }
+      : { outcome: { outcome: 'cancelled' } };
+  }
 
-    const selected = availableModels.find(
-      (model) => model.id === requestedModel || model.label === requestedModel,
-    );
-    if (selected) {
-      if (selected.id !== currentModelId) {
-        await this.client.request('session/set_model', { modelId: selected.id, sessionId });
-      }
-      return selected.id;
+  private async handleElicitation(params: unknown): Promise<unknown> {
+    const bridge = this.options.askUserBridge;
+    if (!bridge || !isRecord(params) || params.mode !== 'form') {
+      throw new AcpServerRequestError(-32_602, 'Unsupported Antigravity elicitation mode');
     }
+    if (!this.steerable || params.sessionId !== this.acpSessionId) return { action: 'cancel' };
+    const { toolCallId } = params;
+    const questions = parseAntigravityQuestions(params.requestedSchema);
+    if (typeof toolCallId !== 'string' || !toolCallId || !questions) return { action: 'decline' };
 
-    const modelConfig = findConfigOption(
-      sessionResult?.configOptions,
-      (opt) => opt.id === 'model' || opt.category === 'model',
-    );
-    const familyOptions = Array.isArray(modelConfig?.options)
-      ? modelConfig.options.filter(isRecord)
-      : [];
-    const matchedFamily = familyOptions.find(
-      (opt) => opt.value === requestedModel || opt.name === requestedModel,
-    );
-    if (matchedFamily && typeof matchedFamily.value === 'string') {
-      const response = await this.client.request<{ configOptions?: unknown }>(
-        'session/set_config_option',
-        {
-          configId: typeof modelConfig?.id === 'string' ? modelConfig.id : 'model',
-          sessionId,
-          value: matchedFamily.value,
+    const args = { questions: questions.map(({ question }) => question) };
+    await this.pushToPipeline({
+      name: 'askUserQuestion',
+      rawInput: args,
+      sessionUpdate: 'tool_call',
+      toolCallId,
+    });
+    if (!this.steerable) return { action: 'cancel' };
+    const answer = await bridge.pending(
+      { arguments: args, toolCallId },
+      {
+        // Queue the request and ACK alongside the tool events. An independent
+        // bridge pump can persist the question before the new assistant step.
+        onEvent: (event) => {
+          void this.emitEvents([event]).catch(() => this.interrupt());
         },
-      );
-      return (
-        resolveModelFromConfigOptions(response?.configOptions, this.availableModelIds) ??
-        matchedFamily.value
-      );
+      },
+    );
+    return buildAntigravityElicitationResponse(questions, answer);
+  }
+
+  /**
+   * Resume without replaying history; agy points sessions it cannot resume to
+   * `session/load`, whose replay arrives before the prompt and is dropped.
+   */
+  private async openSession(
+    initialized: AntigravityAcpInitializeResult,
+  ): Promise<AntigravityAcpSessionResult> {
+    const params = { cwd: this.options.cwd, mcpServers: [] };
+    const resumeSessionId = this.options.resumeSessionId;
+    if (!resumeSessionId) {
+      return this.client.request<AntigravityAcpSessionResult>('session/new', params);
     }
 
-    // Forward custom models (e.g. enterprise gateway or settings.json custom models) directly.
-    await this.client.request('session/set_model', { modelId: requestedModel, sessionId });
-    return requestedModel;
+    const resumeParams = { ...params, sessionId: resumeSessionId };
+    if (initialized.agentCapabilities?.sessionCapabilities?.resume !== undefined) {
+      try {
+        return await this.client.request<AntigravityAcpSessionResult>(
+          'session/resume',
+          resumeParams,
+        );
+      } catch (error) {
+        if (!(error instanceof AcpRpcResponseError)) throw error;
+      }
+    }
+    const loaded = await this.client.request<AntigravityAcpSessionResult>(
+      'session/load',
+      resumeParams,
+    );
+    await this.client.drain();
+    return loaded;
+  }
+
+  /**
+   * Apply the selected model (a full id such as `gemini-4-neon-xhigh`, which
+   * agy splits into model and thinking level), effort and mode. Returns the
+   * model the session runs.
+   */
+  private async applySessionConfig(
+    sessionId: string,
+    sessionResult: AntigravityAcpSessionResult,
+  ): Promise<string | undefined> {
+    let configOptions = sessionResult.configOptions;
+    const set = async (configId: string, value: string) => {
+      const result = await this.client.request<{ configOptions?: unknown }>(
+        'session/set_config_option',
+        { configId, sessionId, value },
+      );
+      if (result.configOptions !== undefined) configOptions = result.configOptions;
+    };
+
+    const { effort, mode } = this.launch;
+    const model =
+      this.launch.model && this.launch.model !== 'default'
+        ? resolveModelValue(this.launch.model, effort, sessionResult)
+        : undefined;
+    if (model) await set('model', model);
+    // Changing models can replace or remove the thinking-level choices.
+    if (effort && configOptionValues(configOptions, 'thought_level').includes(effort)) {
+      await set('thought_level', effort);
+    }
+    if (mode) await set('mode', mode);
+
+    const family = configValue(configOptions, 'model');
+    if (!family) return model;
+    const level = configValue(configOptions, 'thought_level');
+    const variant = level ? `${family}-${level}` : undefined;
+    return variant && availableModelIds(sessionResult).has(variant) ? variant : family;
+  }
+
+  private addUsage(usage: unknown): void {
+    if (!isRecord(usage)) return;
+    for (const field of USAGE_FIELDS) {
+      const value = usage[field];
+      if (typeof value === 'number' && Number.isFinite(value) && value > 0) {
+        this.usage[field] += value;
+      }
+    }
   }
 }

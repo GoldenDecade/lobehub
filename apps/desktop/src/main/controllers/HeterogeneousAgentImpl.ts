@@ -464,15 +464,9 @@ export default class HeterogeneousAgentCtr {
    * (pi RPC, codex app-server, ACP sessions, Claude SDK) register here so a
    * future agent adopting an RPC mode only adds one entry — no dispatch edit.
    */
-  private readonly dispatchAcp: HeterogeneousRuntimeDispatcher = async (params, session) => {
-    await this.sendPromptWithAcp(params, session);
-    return true;
-  };
-
   private readonly runtimeDispatchers: Partial<
     Record<HeterogeneousAgentType, HeterogeneousRuntimeDispatcher>
   > = {
-    'antigravity': this.dispatchAcp,
     'claude-code': async (params, session) => {
       if (!(session.useClaudeCodeSdk || this.isClaudeCodeSdkLabEnabled)) return false;
       try {
@@ -488,16 +482,38 @@ export default class HeterogeneousAgentCtr {
       dispatchCodexPrompt(this.codexAppServerHost(), params, session, {
         appServerEnabled: !!(session.useCodexAppServer || this.isCodexAppServerLabEnabled),
       }),
-    'copilot': this.dispatchAcp,
-    'cursor': this.dispatchAcp,
-    'devin': this.dispatchAcp,
-    'droid': this.dispatchAcp,
+    'antigravity': async (params, session) => {
+      await this.sendPromptWithAcp(params, session);
+      return true;
+    },
+    'copilot': async (params, session) => {
+      await this.sendPromptWithAcp(params, session);
+      return true;
+    },
+    'cursor': async (params, session) => {
+      await this.sendPromptWithAcp(params, session);
+      return true;
+    },
+    'devin': async (params, session) => {
+      await this.sendPromptWithAcp(params, session);
+      return true;
+    },
+    'droid': async (params, session) => {
+      await this.sendPromptWithAcp(params, session);
+      return true;
+    },
     'deepseek-harness': async (params, session) => {
       await this.sendPromptWithDsh(params, session);
       return true;
     },
-    'grok-build': this.dispatchAcp,
-    'trae': this.dispatchAcp,
+    'grok-build': async (params, session) => {
+      await this.sendPromptWithAcp(params, session);
+      return true;
+    },
+    'trae': async (params, session) => {
+      await this.sendPromptWithAcp(params, session);
+      return true;
+    },
     // Pi runs exclusively over the RPC transport — there is no json fallback.
     'pi': async (params, session) => {
       try {
@@ -2298,16 +2314,11 @@ export default class HeterogeneousAgentCtr {
       reject(new Error(typeof sessionError === 'string' ? sessionError : sessionError.message));
     });
 
-    // In stdin mode, write the prepared payload; close stdin unless live (Claude Code / Antigravity).
+    // In stdin mode, write the prepared payload; close stdin unless live (Claude Code always is).
     if (useStdin && spawnPlan.stdinPayload !== undefined && proc.stdin) {
       void this.writeCliTraceFile(traceSession, 'stdin.txt', spawnPlan.stdinPayload);
       const live = !!spawnPlan.liveInput;
-      session.liveInput = writeCliPrompt(
-        proc.stdin as Writable,
-        spawnPlan.stdinPayload,
-        live,
-        session.agentType,
-      );
+      session.liveInput = writeCliPrompt(proc.stdin as Writable, spawnPlan.stdinPayload, live);
     }
 
     session.process = proc;
@@ -2331,7 +2342,7 @@ export default class HeterogeneousAgentCtr {
     // file-change diff/stat tracker when `agentType === 'codex'`, so this
     // controller stays agent-agnostic.
     const pipeline = new AgentStreamPipeline({
-      ...(session.liveInput && { adapter: createLiveCliAdapter(session.liveInput) }),
+      ...(session.liveInput && { adapter: createLiveCliAdapter() }),
       agentType: session.agentType,
       cwd,
       env: spawnEnv,

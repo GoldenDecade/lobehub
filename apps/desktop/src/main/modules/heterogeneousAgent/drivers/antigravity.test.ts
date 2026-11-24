@@ -4,7 +4,7 @@ import { getHeterogeneousAgentDriver } from '../index';
 import { antigravityDriver } from './antigravity';
 
 describe('antigravityDriver', () => {
-  it('registers the driver and requires native ACP execution', async () => {
+  it('is registered and routes prompts through the native ACP session', async () => {
     expect(getHeterogeneousAgentDriver('antigravity')).toBe(antigravityDriver);
     await expect(antigravityDriver.buildSpawnPlan({} as never)).rejects.toThrow(
       'native ACP session',

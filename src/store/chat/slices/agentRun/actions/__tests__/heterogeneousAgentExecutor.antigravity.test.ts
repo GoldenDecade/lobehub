@@ -1,4 +1,4 @@
-/** Antigravity stream → tool persistence, final reply and resumable session identity. */
+/** Antigravity ACP stream → tool persistence, final reply and resumable session identity. */
 import type { AgentEventAdapter } from '@lobechat/heterogeneous-agents';
 import { createAdapter } from '@lobechat/heterogeneous-agents';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -9,7 +9,6 @@ import { executeHeterogeneousAgent } from '../transports/hetero/heterogeneousAge
 const mockBatchMutate = vi.fn();
 const mockCreateMessage = vi.fn();
 const mockUpdateMessage = vi.fn();
-const mockUpdateMessageError = vi.fn(async () => ({ success: false }));
 const mockUpdateToolMessage = vi.fn();
 vi.mock('@/services/message', () => ({
   messageService: {
@@ -17,7 +16,7 @@ vi.mock('@/services/message', () => ({
     createMessage: (...args: any[]) => mockCreateMessage(...args),
     getMessages: vi.fn(async () => []),
     updateMessage: (...args: any[]) => mockUpdateMessage(...args),
-    updateMessageError: (...args: any[]) => mockUpdateMessageError(...args),
+    updateMessageError: vi.fn(async () => ({ success: false })),
     updateToolMessage: (...args: any[]) => mockUpdateToolMessage(...args),
   },
 }));
@@ -186,38 +185,34 @@ describe('heterogeneousAgentExecutor — Antigravity', () => {
   };
 
   it('persists native Antigravity tools, final reply and resumable conversation identity', async () => {
+    // `agy acp` session updates as recorded from agy 1.5.15.
     const { store } = await runWithEvents(
       [
-        { event: 'init', conversation_id: 'agy-conversation', init: { cwd: '/project' } },
+        { model: 'gemini-4-neon-high', sessionId: 'agy-conversation', type: 'antigravity_session' },
         {
-          event: 'step_update',
-          step_update: {
-            conversation_id: 'agy-conversation',
-            step_index: 1,
-            state: 'DONE',
-            step_type: 'tool',
-            tool_info: { name: 'read_file', parameters: { path: 'hello.txt' }, output: 'hello' },
-          },
+          kind: 'read',
+          name: 'read_file',
+          rawInput: { Path: 'hello.txt' },
+          sessionUpdate: 'tool_call',
+          status: 'in_progress',
+          title: 'File hello.txt',
+          toolCallId: 'call_1',
         },
         {
-          event: 'step_update',
-          step_update: {
-            conversation_id: 'agy-conversation',
-            step_index: 2,
-            state: 'DONE',
-            step_type: 'agent_response',
-            text_delta: 'The file says hello.',
-            usage: { input_tokens: 10, output_tokens: 5 },
-          },
+          content: [{ content: { text: 'hello', type: 'text' }, type: 'content' }],
+          name: 'read_file',
+          sessionUpdate: 'tool_call_update',
+          status: 'completed',
+          toolCallId: 'call_1',
         },
         {
-          event: 'result',
-          result: {
-            conversation_id: 'agy-conversation',
-            status: 'SUCCESS',
-            response: 'The file says hello.',
-            usage: { input_tokens: 100, output_tokens: 50 },
-          },
+          content: { text: 'The file says hello.', type: 'text' },
+          sessionUpdate: 'agent_message_chunk',
+        },
+        {
+          stopReason: 'end_turn',
+          type: 'antigravity_prompt_completed',
+          usage: { cachedReadTokens: 0, inputTokens: 10, outputTokens: 5, thoughtTokens: 0 },
         },
       ],
       { params: { heterogeneousProvider: { command: 'agy', type: 'antigravity' } } },
@@ -226,8 +221,12 @@ describe('heterogeneousAgentExecutor — Antigravity', () => {
     const tool = mockCreateMessage.mock.calls.find(([p]) => p.role === 'tool')?.[0];
     expect(tool).toMatchObject({
       parentId: 'ast-initial',
-      plugin: { apiName: 'read_file', identifier: 'antigravity' },
-      tool_call_id: 'agy_agy-conversation_1',
+      plugin: {
+        apiName: 'read_file',
+        arguments: '{"Path":"hello.txt"}',
+        identifier: 'antigravity',
+      },
+      tool_call_id: 'call_1',
     });
     expect(mockUpdateToolMessage).toHaveBeenCalledWith(
       tool.id,
@@ -251,126 +250,6 @@ describe('heterogeneousAgentExecutor — Antigravity', () => {
     expect(store.updateTopicMetadata).toHaveBeenCalledWith(
       'topic-1',
       expect.objectContaining({ heteroSessionId: 'agy-conversation' }),
-    );
-  });
-
-  it('completes cleanly without persisting a false error when agy echoes a sticky historical ERROR_MESSAGE in result', async () => {
-    const { store } = await runWithEvents([
-      { event: 'init', conversation_id: 'agy-conversation', init: { cwd: '/project' } },
-      {
-        event: 'step_update',
-        step_update: {
-          conversation_id: 'agy-conversation',
-          state: 'DONE',
-          step_index: 267,
-          step_type: 'user_input',
-        },
-      },
-      {
-        event: 'step_update',
-        step_update: {
-          conversation_id: 'agy-conversation',
-          state: 'DONE',
-          step_index: 277,
-          step_type: 'agent_response',
-          text_delta: 'All checks passed.',
-          usage: { input_tokens: 10, output_tokens: 5 },
-        },
-      },
-      {
-        event: 'result',
-        result: {
-          conversation_id: 'agy-conversation',
-          error: 'The stream was interrupted. Please continue the task you were working on.',
-          response: 'All checks passed.',
-          status: 'ERROR',
-          usage: { input_tokens: 500, output_tokens: 120 },
-        },
-      },
-    ]);
-
-    expect(mockUpdateMessage).toHaveBeenCalledWith(
-      'ast-initial',
-      expect.objectContaining({ content: 'All checks passed.' }),
-      expect.anything(),
-    );
-    expect(mockUpdateMessageError).not.toHaveBeenCalled();
-    expect(store.markTopicUnread).toHaveBeenCalledWith(
-      expect.objectContaining({ agentId: 'agent-1', topicId: 'topic-1' }),
-    );
-  });
-
-  it('persists tool error without failing the assistant reply when an agy tool step ends in ERROR and a background command stays ACTIVE', async () => {
-    await runWithEvents([
-      { event: 'init', conversation_id: 'agy-conversation', init: { cwd: '/project' } },
-      {
-        event: 'step_update',
-        step_update: {
-          conversation_id: 'agy-conversation',
-          state: 'ACTIVE',
-          step_index: 388,
-          step_type: 'tool',
-          tool_info: { name: 'run_command', parameters: { CommandLine: 'lh agent list' } },
-        },
-      },
-      {
-        event: 'step_update',
-        step_update: {
-          conversation_id: 'agy-conversation',
-          state: 'ACTIVE',
-          step_index: 390,
-          step_type: 'tool',
-          tool_info: { name: 'read_file', parameters: { Path: '/tmp/388.log' } },
-        },
-      },
-      {
-        event: 'step_update',
-        step_update: {
-          conversation_id: 'agy-conversation',
-          state: 'ERROR',
-          step_index: 390,
-          step_type: 'tool',
-          tool_info: {
-            error: { message: 'file does not exist', type: 'TOOL_ERROR' },
-            name: 'read_file',
-            parameters: { Path: '/tmp/388.log' },
-          },
-        },
-      },
-      {
-        event: 'step_update',
-        step_update: {
-          conversation_id: 'agy-conversation',
-          state: 'DONE',
-          step_index: 432,
-          step_type: 'agent_response',
-          text_delta: 'Upgrade plan is ready.',
-          usage: { input_tokens: 100, output_tokens: 20 },
-        },
-      },
-      {
-        event: 'result',
-        result: {
-          conversation_id: 'agy-conversation',
-          error: 'The stream was interrupted. Please continue the task you were working on.',
-          response: 'Upgrade plan is ready.',
-          status: 'ERROR',
-        },
-      },
-    ]);
-
-    expect(mockUpdateMessageError).not.toHaveBeenCalled();
-    const erroredTool = mockCreateMessage.mock.calls.find(
-      ([p]) => p.tool_call_id === 'agy_agy-conversation_390',
-    )?.[0];
-    expect(erroredTool).toBeDefined();
-    expect(mockUpdateToolMessage).toHaveBeenCalledWith(
-      erroredTool.id,
-      expect.objectContaining({
-        content: 'file does not exist',
-        pluginError: expect.objectContaining({ message: 'file does not exist' }),
-      }),
-      expect.anything(),
     );
   });
 });

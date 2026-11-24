@@ -37,9 +37,9 @@ describe('AntigravityAcpAdapter', () => {
     ]);
 
     const toolStartEvents = adapter.adapt({
-      args: { CommandLine: 'git switch -c feat/acp-images', WaitMsBeforeAsync: 5000 },
       kind: 'execute',
       name: 'run_command',
+      rawInput: { CommandLine: 'git switch -c feat/acp-images', WaitMsBeforeAsync: 5000 },
       sessionUpdate: 'tool_call',
       status: 'in_progress',
       title: 'git switch -c feat/acp-images',
@@ -99,18 +99,6 @@ describe('AntigravityAcpAdapter', () => {
       {
         data: {
           isSuccess: true,
-          payload: {
-            toolCalling: {
-              apiName: 'run_command',
-              arguments: '{"CommandLine":"git switch -c feat/acp-images","WaitMsBeforeAsync":5000}',
-              id: 'call_1',
-              identifier: 'antigravity',
-            },
-          },
-          result: {
-            content: 'Switched to a new branch feat/acp-images',
-            success: true,
-          },
           toolCallId: 'call_1',
         },
         stepIndex: 0,
@@ -163,7 +151,6 @@ describe('AntigravityAcpAdapter', () => {
           usage: {
             inputCachedTokens: 48_927,
             inputCacheMissTokens: 35_722,
-            inputWriteCacheTokens: undefined,
             outputReasoningTokens: 56,
             outputTextTokens: 162,
             totalInputTokens: 84_649,

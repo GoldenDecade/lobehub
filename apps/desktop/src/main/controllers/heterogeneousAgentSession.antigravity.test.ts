@@ -35,7 +35,7 @@ const createHost = (): AcpSessionHost => ({
   needsSessionIntroduction: () => false,
   resolveSessionCommand: (sess) => sess.command,
   resolveSessionWorkingDirectory: (sess) => sess.cwd ?? '/workspace',
-  setupAcpInterventionForOp: vi.fn() as never,
+  setupAcpInterventionForOp: vi.fn(() => ({ bridge: {} as never, cleanup: vi.fn() })) as never,
   writeCliTraceFile: vi.fn(),
   writeCliTraceJson: vi.fn(),
 });
@@ -112,9 +112,9 @@ describe('heterogeneousAgentSession — Antigravity ACP', () => {
       sessionId: 'desktop-sess-2',
     };
 
-    const error = new AcpRpcResponseError('session/resume', {
+    const error = new AcpRpcResponseError('session/load', {
       code: -32_603,
-      message: 'Failed to read session stale-conv; retry, or load it with session/load',
+      message: 'Session not found: stale-conv',
     });
     expect(getAcpResumeError(error, session)).toMatchObject({
       agentType: 'antigravity',

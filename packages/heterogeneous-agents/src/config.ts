@@ -69,7 +69,6 @@ export const getHeterogeneousAgentConfigOrThrow = (
 };
 
 const SESSION_INITIAL_MODEL_TYPES = new Set<string>([
-  'antigravity',
   'copilot',
   'deepseek-harness',
   'devin',
