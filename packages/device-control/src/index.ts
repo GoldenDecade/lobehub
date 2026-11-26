@@ -1,4 +1,3 @@
-export { getAntigravityQuota } from './antigravityQuota';
 export { listAntigravitySkills } from './antigravitySkills';
 export {
   listClaudeCodeMemory,
