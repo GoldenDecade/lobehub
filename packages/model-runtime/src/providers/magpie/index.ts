@@ -1,6 +1,6 @@
 import { CURRENT_VERSION } from '@lobechat/const';
 import type { ChatModelCard } from '@lobechat/types';
-import { loadModels, MODEL_REASONING_EXTEND_PARAMS, ModelProvider } from 'model-bank';
+import { loadModels, ModelProvider } from 'model-bank';
 import OpenAI from 'openai';
 
 import type { OpenAICompatibleFactoryOptions } from '../../core/openaiCompatible';
@@ -9,9 +9,6 @@ import type { ChatStreamPayload } from '../../types';
 import { processMultiProviderModelList } from '../../utils/modelParse';
 
 type ModelSettings = NonNullable<ChatModelCard['settings']>;
-
-/** The params that set how hard a model thinks, which a `reasoning: false` card must not offer. */
-const REASONING_PARAMS = new Set<string>(MODEL_REASONING_EXTEND_PARAMS);
 
 /** Vendor-specific extendParams whose wire shape Magpie's unified `/v1/chat/completions` does not support. */
 const UNSUPPORTED_EXTEND_PARAMS = new Set<string>([
@@ -22,7 +19,6 @@ const UNSUPPORTED_EXTEND_PARAMS = new Set<string>([
   'imageResolution2',
   'urlContext',
 ]);
-
 /**
  * One row of magpie's `GET /v1/models`.
  *
@@ -174,13 +170,12 @@ const plainName = (model: MagpieModelCard): string | undefined => {
 /**
  * model-bank's settings for one model, limited to the parts magpie leaves unsaid.
  *
- * `reasoning_levels` says a model thinks, not which parameter turns the
- * strength, and that parameter differs by model family (`gpt5_6ReasoningEffort`,
- * `kimiK3ReasoningEffort`, …), so the one this entry names is what puts the
- * choice in the chat settings at all.
+ * `reasoning_levels` says a model thinks, not which levels and default the
+ * vendor accepts, so this entry's `reasoningEffort` is what puts the choice in
+ * the chat settings at all.
  *
- * The reasoning params go when the user turned thinking off in magpie: the
- * card says `reasoning: false`, and offering a strength beside it would let a
+ * The effort spec goes when the user turned thinking off in magpie: the card
+ * says `reasoning: false`, and offering a strength beside it would let a
  * choice be made for a model the gateway then pushes back up to its lowest
  * thinking level.
  *
@@ -196,18 +191,18 @@ const knownSettings = (
 ): Pick<ChatModelCard, 'settings'> => {
   const extendParams: ModelSettings['extendParams'] = known?.settings?.extendParams;
   const disabledParams: ModelSettings['disabledParams'] = known?.settings?.disabledParams;
+  const reasoningEffort: ModelSettings['reasoningEffort'] =
+    thinks === false ? undefined : known?.settings?.reasoningEffort;
 
-  const usable = extendParams?.filter(
-    (param) =>
-      !UNSUPPORTED_EXTEND_PARAMS.has(param) && (thinks !== false || !REASONING_PARAMS.has(param)),
-  );
+  const usable = extendParams?.filter((param) => !UNSUPPORTED_EXTEND_PARAMS.has(param));
 
-  if (!usable?.length && !disabledParams) return {};
+  if (!usable?.length && !disabledParams && !reasoningEffort) return {};
 
   return {
     settings: {
       ...(usable?.length ? { extendParams: usable } : {}),
       ...(disabledParams ? { disabledParams } : {}),
+      ...(reasoningEffort ? { reasoningEffort } : {}),
     },
   };
 };
